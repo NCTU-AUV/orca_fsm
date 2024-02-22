@@ -4,7 +4,7 @@ from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
 from std_msgs.msg import Float64MultiArray
 from vision_msgs.msg import Detection2DArray
-from vision_msgs.msg import Pose2D
+from vision_msgs.msg import Point2D
 
 class FSM(Node):
 
@@ -28,63 +28,127 @@ class FSM(Node):
         self.dz = 0.0
         self.d_yaw = 0.0
 
-        self.gate_pose = Pose2D()
+        self.speed_x = 1.0
+        self.speed_y = 1.0
+        self.speed_z = 1.0
+        self.speed_yaw = 1.0
+
+        self.cruise_init_interval = 5.0 # seconds
+        self.cruise_interval = 5.0
+        self.cruise_direction = 1.0
+
+        self.gate_pose = Point2D()
         self.gate_detected = False
-        self.blue_drum_pose = Pose2D()
+        self.gate_center_tolerance = 30 # pixels
+        self.blue_drum_pose = Point2D()
         self.blue_drum_detected = False
-        self.metal_ball_pose = Pose2D()
+        self.metal_ball_pose = Point2D()
         self.metal_ball_detected = False
-        self.orange_flare_pose = Pose2D()
+        self.orange_flare_pose = Point2D()
         self.orange_flare_detected = False
-        self.yellow_flare_pose = Pose2D()
+        self.yellow_flare_pose = Point2D()
         self.yellow_flare_detected = False
-        self.red_flare_pose = Pose2D()
+        self.red_flare_pose = Point2D()
         self.red_flare_detected = False
-        self.blue_flare_pose = Pose2D()
+        self.blue_flare_pose = Point2D()
         self.blue_flare_detected = False
 
         timer_period = 0.5  # seconds
         self.timer = self.create_timer(timer_period, self.timer_callback)
         self.i = 0
 
-        self.cur_task = 'PASS_DOOR'
+        self.cur_task = 'PASS_GATE'
+        self.cur_state = 'CRUISE'
 
 
-    def task_pass_door(self):
-        self.get_logger().info('PASS DOOR')
-        # TODO: Implement pass door task
-        return True
+    def task_pass_gate(self):
+        if self.cur_state == 'CRUISE':
+            # TODO: Implement cruise interval logic
+            self.dx = self.speed_x * self.cruise_direction
+            self.dy = 0.0
+            self.dz = 0.0
+            self.d_yaw = 0.0
+            if self.gate_detected:
+                self.cur_state = 'AIM_GATE'
+        elif self.cur_state == 'AIM_GATE':
+            if not self.gate_detected:
+                self.cur_state = 'CRUISE'
+            elif abs(self.gate_pose.x - 320) < self.gate_center_tolerance:
+            # check if gate is centered
+                if self.orange_flare_detected:
+                    self.cur_state = 'AVOID_FLARE'
+                else:
+                    self.cur_state = 'AIM_GATE_FORWARD'
+            else:
+                if self.gate_pose.x < 320:
+                    self.dx = self.speed_x
+                else:
+                    self.dx = self.speed_x * -1.0
+                self.dy = 0.0
+                self.dz = 0.0
+                self.d_yaw = 0.0
+        elif self.cur_state == 'AIM_GATE_FORWARD':
+            self.dx = 0.0
+            self.dy = self.speed_y
+            self.dz = 0.0
+            self.d_yaw = 0.0
+            if not self.gate_detected:
+                self.cur_state = 'FINISH'
+            elif abs(self.gate_pose.x - 320) > self.gate_center_tolerance:
+                self.cur_state = 'AIM_GATE'
+        elif self.cur_state == 'AVOID_FLARE':
+            # TODO: Implement avoid flare logic
+            self.dx = self.speed_x
+            self.dy = 0.0
+            self.dz = 0.0
+            self.d_yaw = 0.0
+            if True:
+                self.cur_state = 'AVOID_FLARE_FORWARD'
+        elif self.cur_state == 'AVOID_FLARE_FORWARD':
+            # TODO: Implement avoid flare forward logic
+            self.dx = 0.0
+            self.dy = self.speed_y
+            self.dz = 0.0
+            self.d_yaw = 0.0
+        elif self.cur_state == 'BACT_TO_GATE':
+            self.dx = self.speed_x * -1.0
+            self.dy = 0.0
+            self.dz = 0.0
+            self.d_yaw = 0.0
+            if self.gate_detected:
+                self.cur_state = 'AIM_GATE'
+        elif self.cur_state == 'FINISH':
+            self.dx = 0.0
+            self.dy = 0.0
+            self.dz = 0.0
+            self.d_yaw = 0.0
+            self.cur_task = 'BUMP_FLARE'
+            self.cur_state = 'DONE'
 
     def task_bump_flare(self):
-        self.get_logger().info('BUMP FLARE')
+        pass
         # TODO: Implement bump flare task
-        return True
 
-    def task_drop_ball(self):
-        self.get_logger().info('DROP BALL')
-        # TODO: Implement drop ball task
-        return True
-
-    def task_pick_ball(self):
-        self.get_logger().info('PICK BALL')
-        # TODO: Implement pick ball task
-        return True
+    # def task_drop_ball(self):
+    #     # TODO: Implement drop ball task
+    #
+    # def task_pick_ball(self):
+    #     # TODO: Implement pick ball task
 
     def main_sequence(self):
-        if self.cur_task == 'PASS_DOOR':
-            if self.task_pass_door():
-                self.cur_task = 'BUMP_FLARE'
-        elif self.cur_task == 'BUMP_FLARE':
-            if self.task_bump_flare():
-                self.cur_task = 'DROP_BALL'
-        elif self.cur_task == 'DROP_BALL':
-            if self.task_drop_ball():
-                self.cur_task = 'PICK_BALL'
-        elif self.cur_task == 'PICK_BALL':
-            if self.task_pick_ball():
-                self.cur_task = 'DONE'
-        elif self.cur_task == 'DONE':
+        if self.cur_state == 'DONE':
             self.get_logger().info('DONE')
+        else:
+            self.get_logger().info(self.cur_task + ' -> ' + self.cur_state)
+        if self.cur_task == 'PASS_GATE':
+            self.task_pass_gate()
+        elif self.cur_task == 'BUMP_FLARE':
+            self.task_bump_flare()
+        # elif self.cur_task == 'DROP_BALL':
+        #     self.task_drop_ball()
+        # elif self.cur_task == 'PICK_BALL':
+        #     self.task_pick_ball()
+        elif self.cur_task == 'DONE':
             self.dx = 0.0
             self.dy = 0.0
             self.dz = 0.0
@@ -93,7 +157,6 @@ class FSM(Node):
             self.get_logger().info('Error: Invalid task')
 
     def detection_cb(self, detection_msg):
-        self.get_logger().info('Detected')
         self.gate_detected = False
         self.blue_drum_detected = False
         self.metal_ball_detected = False
@@ -106,49 +169,44 @@ class FSM(Node):
             result = detection.results[0]
             # get the detection with the highest score
             # self.get_logger().info('Class ID: ' + result.hypothesis.class_id)
-            if result.hypothesis.class_id in score_dict:
-                if result.hypothesis.score < score_dict[result.hypothesis.class_id]:
+            id = detection.results[0].hypothesis.class_id
+            score = detection.results[0].hypothesis.score
+            result_pose = detection.bbox.center.position
+            if id in score_dict:
+                if result.hypothesis.score < score_dict[id]:
                     continue
-                else:
-                    score_dict[result.hypothesis.class_id] = result.hypothesis.score
+                score_dict[id] = result.hypothesis.score
             # TODO: match object id
-            if result.hypothesis.class_id == '0':
+            if id == '0':
                 if result.hypothesis.score > 0.5:
-                    self.get_logger().info('Gate detected')
-                    self.gate_pose = result.pose
+                    self.gate_pose = result_pose
                     self.gate_detected = True
-            elif result.hypothesis.class_id == '1':
+            elif id == '1':
                 if result.hypothesis.score > 0.5:
-                    self.get_logger().info('Blue drum detected')
-                    self.blue_drum_pose = result.pose
+                    self.blue_drum_pose = result_pose
                     self.blue_drum_detected = True
-            elif result.hypothesis.class_id == '2':
+            elif id == '2':
                 if result.hypothesis.score > 0.5:
-                    self.get_logger().info('Metal ball detected')
-                    self.metal_ball_pose = result.pose
+                    self.metal_ball_pose = result_pose
                     self.metal_ball_detected = True
-            elif result.hypothesis.class_id == '3':
+            elif id == '3':
                 if result.hypothesis.score > 0.5:
-                    self.get_logger().info('Orange flare detected')
-                    self.orange_flare_pose = result.pose
+                    self.orange_flare_pose = result_pose
                     self.orange_flare_detected = True
-            elif result.hypothesis.class_id == '4':
+            elif id == '4':
                 if result.hypothesis.score > 0.5:
-                    self.get_logger().info('Yellow flare detected')
-                    self.yellow_flare_pose = result.pose
+                    self.yellow_flare_pose = result_pose
                     self.yellow_flare_detected = True
-            elif result.hypothesis.class_id == '5':
+            elif id == '5':
                 if result.hypothesis.score > 0.5:
-                    self.get_logger().info('Red flare detected')
-                    self.red_flare_pose = result.pose
+                    self.red_flare_pose = result_pose
                     self.red_flare_detected = True
-            elif result.hypothesis.class_id == '6':
+            elif id == '6':
                 if result.hypothesis.score > 0.5:
-                    self.get_logger().info('Blue flare detected')
-                    self.blue_flare_pose = result.pose
+                    self.blue_flare_pose = result_pose
                     self.blue_flare_detected = True
             else:
-                self.get_logger().info('Error: Invalid class_id')
+                raise ValueError('Invalid class id')
 
         self.main_sequence()
 
@@ -156,7 +214,6 @@ class FSM(Node):
         msg = Float64MultiArray()
         msg.data = [self.dx, self.dy, self.dz, self.d_yaw]
         self.pub.publish(msg)
-        self.get_logger().info('Publishing: "%s"' % msg.data)
 
 
 def main(args=None):
