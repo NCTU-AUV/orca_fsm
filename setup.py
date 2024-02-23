@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'fsm = orca_fsm.fsm:main',
+            'bridge = orca_fsm.bridge:main',
         ],
     },
 )
