@@ -6,6 +6,16 @@ from std_msgs.msg import Float64MultiArray
 from vision_msgs.msg import Detection2DArray
 from vision_msgs.msg import Point2D
 
+obj_name = {
+     '0': 'blue_drum',
+     '1': 'blue_flare',
+     '2': 'gate',
+     '3': 'metal_ball',
+     '4': 'orange_flare',
+     '5': 'red_flare',
+     '6': 'yellow_flare',
+}
+
 class FSM(Node):
 
     def __init__(self):
@@ -23,6 +33,13 @@ class FSM(Node):
             'fsm_output',
             10)
 
+        timer_period = 0.5  # seconds
+        self.timer = self.create_timer(timer_period, self.timer_callback)
+
+        # Varaibles
+        self.cur_task = 'PASS_GATE'
+        self.cur_state = 'CRUISE'
+
         self.dx = 0.0
         self.dy = 0.0
         self.dz = 0.0
@@ -33,33 +50,30 @@ class FSM(Node):
         self.speed_z = 1.0
         self.speed_yaw = 1.0
 
+        self.pose = {
+            'blue_drum': Point2D(),
+            'blue_flare': Point2D(),
+            'gate': Point2D(),
+            'metal_ball': Point2D(),
+            'orange_flare': Point2D(),
+            'red_flare': Point2D(),
+            'yellow_flare': Point2D()
+        }
+        self.detected = {
+            'blue_drum': False,
+            'blue_flare': False,
+            'gate': False,
+            'metal_ball': False,
+            'orange_flare': False,
+            'red_flare': False,
+            'yellow_flare': False
+        }
+
+        # Parameters
         self.cruise_init_interval = 5.0 # seconds
         self.cruise_interval = 5.0
         self.cruise_direction = 1.0
-
-        self.gate_pose = Point2D()
-        self.gate_detected = False
-        self.gate_center_tolerance = 30 # pixels
-        self.blue_drum_pose = Point2D()
-        self.blue_drum_detected = False
-        self.metal_ball_pose = Point2D()
-        self.metal_ball_detected = False
-        self.orange_flare_pose = Point2D()
-        self.orange_flare_detected = False
-        self.yellow_flare_pose = Point2D()
-        self.yellow_flare_detected = False
-        self.red_flare_pose = Point2D()
-        self.red_flare_detected = False
-        self.blue_flare_pose = Point2D()
-        self.blue_flare_detected = False
-
-        timer_period = 0.5  # seconds
-        self.timer = self.create_timer(timer_period, self.timer_callback)
-        self.i = 0
-
-        self.cur_task = 'PASS_GATE'
-        self.cur_state = 'CRUISE'
-
+        self.center_tolerance = 30 # pixels
 
     def task_pass_gate(self):
         if self.cur_state == 'CRUISE':
@@ -68,19 +82,19 @@ class FSM(Node):
             self.dy = 0.0
             self.dz = 0.0
             self.d_yaw = 0.0
-            if self.gate_detected:
+            if self.detected['gate']:
                 self.cur_state = 'AIM_GATE'
         elif self.cur_state == 'AIM_GATE':
-            if not self.gate_detected:
+            if not self.detected['gate']:
                 self.cur_state = 'CRUISE'
-            elif abs(self.gate_pose.x - 320) < self.gate_center_tolerance:
+            elif abs(self.pose['gate'].x - 320) < self.center_tolerance:
             # check if gate is centered
-                if self.orange_flare_detected:
+                if self.detected['orange_flare']:
                     self.cur_state = 'AVOID_FLARE'
                 else:
                     self.cur_state = 'AIM_GATE_FORWARD'
             else:
-                if self.gate_pose.x < 320:
+                if self.pose['gate'].x < 320:
                     self.dx = self.speed_x
                 else:
                     self.dx = self.speed_x * -1.0
@@ -92,9 +106,9 @@ class FSM(Node):
             self.dy = self.speed_y
             self.dz = 0.0
             self.d_yaw = 0.0
-            if not self.gate_detected:
+            if not self.detected['gate']:
                 self.cur_state = 'FINISH'
-            elif abs(self.gate_pose.x - 320) > self.gate_center_tolerance:
+            elif abs(self.pose['gate'].x - 320) > self.center_tolerance:
                 self.cur_state = 'AIM_GATE'
         elif self.cur_state == 'AVOID_FLARE':
             # TODO: Implement avoid flare logic
@@ -115,7 +129,7 @@ class FSM(Node):
             self.dy = 0.0
             self.dz = 0.0
             self.d_yaw = 0.0
-            if self.gate_detected:
+            if self.detected['gate']:
                 self.cur_state = 'AIM_GATE'
         elif self.cur_state == 'FINISH':
             self.dx = 0.0
@@ -157,13 +171,8 @@ class FSM(Node):
             self.get_logger().info('Error: Invalid task')
 
     def detection_cb(self, detection_msg):
-        self.gate_detected = False
-        self.blue_drum_detected = False
-        self.metal_ball_detected = False
-        self.orange_flare_detected = False
-        self.yellow_flare_detected = False
-        self.red_flare_detected = False
-        self.blue_flare_detected = False
+        for key in self.detected.keys():
+            self.detected[key] = False
         score_dict = {}
         for detection in detection_msg.detections:
             result = detection.results[0]
@@ -176,38 +185,12 @@ class FSM(Node):
                 if result.hypothesis.score < score_dict[id]:
                     continue
                 score_dict[id] = result.hypothesis.score
-            # TODO: match object id
-            if id == '0':
+            if id in obj_name:
                 if result.hypothesis.score > 0.5:
-                    self.gate_pose = result_pose
-                    self.gate_detected = True
-            elif id == '1':
-                if result.hypothesis.score > 0.5:
-                    self.blue_drum_pose = result_pose
-                    self.blue_drum_detected = True
-            elif id == '2':
-                if result.hypothesis.score > 0.5:
-                    self.metal_ball_pose = result_pose
-                    self.metal_ball_detected = True
-            elif id == '3':
-                if result.hypothesis.score > 0.5:
-                    self.orange_flare_pose = result_pose
-                    self.orange_flare_detected = True
-            elif id == '4':
-                if result.hypothesis.score > 0.5:
-                    self.yellow_flare_pose = result_pose
-                    self.yellow_flare_detected = True
-            elif id == '5':
-                if result.hypothesis.score > 0.5:
-                    self.red_flare_pose = result_pose
-                    self.red_flare_detected = True
-            elif id == '6':
-                if result.hypothesis.score > 0.5:
-                    self.blue_flare_pose = result_pose
-                    self.blue_flare_detected = True
+                    self.pose[obj_name[id]] = result_pose
+                    self.detected[obj_name[id]] = True
             else:
                 raise ValueError('Invalid class id')
-
         self.main_sequence()
 
     def timer_callback(self):
