@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
             'fsm = orca_fsm.fsm:main',
             'bridge = orca_fsm.bridge:main',
+            'teleop = orca_fsm.teleop:main',
         ],
     },
 )
