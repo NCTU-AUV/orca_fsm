@@ -40,10 +40,10 @@ class FSM(Node):
         self.cur_task = 'PASS_GATE'
         self.cur_state = 'CRUISE'
 
-        self.dx = 0.0
-        self.dy = 0.0
-        self.dz = 0.0
-        self.d_yaw = 0.0
+        self.dx = 0.0 # front > 0
+        self.dy = 0.0 # right > 0
+        self.dz = 0.0 # up > 0
+        self.d_yaw = 0.0 # cw > 0
 
         self.speed_x = 1.0
         self.speed_y = 1.0
@@ -78,8 +78,8 @@ class FSM(Node):
     def task_pass_gate(self):
         if self.cur_state == 'CRUISE':
             # TODO: Implement cruise interval logic
-            self.dx = self.speed_x * self.cruise_direction
-            self.dy = 0.0
+            self.dx = 0.0
+            self.dy = self.speed_y * self.cruise_direction
             self.dz = 0.0
             self.d_yaw = 0.0
             if self.detected['gate']:
@@ -95,15 +95,15 @@ class FSM(Node):
                     self.cur_state = 'AIM_GATE_FORWARD'
             else:
                 if self.pose['gate'].x < 320:
-                    self.dx = self.speed_x
+                    self.dy = self.speed_y
                 else:
-                    self.dx = self.speed_x * -1.0
+                    self.dy = self.speed_y * -1.0
                 self.dy = 0.0
                 self.dz = 0.0
                 self.d_yaw = 0.0
         elif self.cur_state == 'AIM_GATE_FORWARD':
-            self.dx = 0.0
-            self.dy = self.speed_y
+            self.dx = self.speed_x
+            self.dy = 0.0
             self.dz = 0.0
             self.d_yaw = 0.0
             if not self.detected['gate']:
@@ -112,21 +112,21 @@ class FSM(Node):
                 self.cur_state = 'AIM_GATE'
         elif self.cur_state == 'AVOID_FLARE':
             # TODO: Implement avoid flare logic
-            self.dx = self.speed_x
-            self.dy = 0.0
+            self.dx = 0.0
+            self.dy = self.speed_y
             self.dz = 0.0
             self.d_yaw = 0.0
             if True:
                 self.cur_state = 'AVOID_FLARE_FORWARD'
         elif self.cur_state == 'AVOID_FLARE_FORWARD':
             # TODO: Implement avoid flare forward logic
-            self.dx = 0.0
-            self.dy = self.speed_y
+            self.dx = self.speed_x
+            self.dy = 0.0
             self.dz = 0.0
             self.d_yaw = 0.0
         elif self.cur_state == 'BACT_TO_GATE':
-            self.dx = self.speed_x * -1.0
-            self.dy = 0.0
+            self.dx = 0.0
+            self.dy = self.speed_y * -1.0
             self.dz = 0.0
             self.d_yaw = 0.0
             if self.detected['gate']:

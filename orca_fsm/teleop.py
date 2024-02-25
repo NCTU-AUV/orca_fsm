@@ -44,26 +44,26 @@ class KeyboardController(Node):
         key = self.get_key()
 
         if key == 'w':
-            self.dx = 0.0
-            self.dy = self.LIN_VEL_STEP
+            self.dx = self.LIN_VEL_STEP
+            self.dy = 0.0
             self.dz = 0.0
             self.d_yaw = 0.0
             self.get_logger().info("front")
         elif key == 'a':
-            self.dx = -self.LIN_VEL_STEP
-            self.dy = 0.0
-            self.dz = 0.0
-            self.d_yaw = 0.0
-            self.get_logger().info("left")
-        elif key == 's':
             self.dx = 0.0
             self.dy = -self.LIN_VEL_STEP
             self.dz = 0.0
             self.d_yaw = 0.0
+            self.get_logger().info("left")
+        elif key == 's':
+            self.dx = -self.LIN_VEL_STEP
+            self.dy = 0.0
+            self.dz = 0.0
+            self.d_yaw = 0.0
             self.get_logger().info("back")
         elif key == 'd':
-            self.dx = self.LIN_VEL_STEP
-            self.dy = 0.0
+            self.dx = 0.0
+            self.dy = self.LIN_VEL_STEP
             self.dz = 0.0
             self.d_yaw = 0.0
             self.get_logger().info("right")
