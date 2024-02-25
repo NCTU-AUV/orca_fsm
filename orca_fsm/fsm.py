@@ -185,7 +185,6 @@ class FSM(Node):
                 self.d_yaw = 0.0
                 if time.time() - self.prev_time > self.pass_gate_finish_time:
                     self.cur_task = 'DONE'
-                    self.nxt_state = 'CRUISE'
                     self.dx = 0.0
             else:
                 raise ValueError('Invalid state - ' + self.cur_state)
