@@ -1,8 +1,7 @@
 import time
 import rclpy
 from rclpy.node import Node
-from rclpy.executors import MultiThreadedExecutor
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float64MultiArray, Float64
 from vision_msgs.msg import Detection2DArray
 from vision_msgs.msg import Point2D
 
@@ -33,12 +32,10 @@ class FSM(Node):
             'fsm_output',
             10)
 
-        timer_period = 0.5  # seconds
-        self.timer = self.create_timer(timer_period, self.timer_callback)
-
         # Varaibles
         self.cur_task = 'PASS_GATE'
-        self.cur_state = 'CRUISE'
+        self.cur_state = 'NONE'
+        self.nxt_state = 'START'
 
         self.dx = 0.0 # front > 0
         self.dy = 0.0 # right > 0
@@ -68,76 +65,130 @@ class FSM(Node):
             'red_flare': False,
             'yellow_flare': False
         }
+        self.gate_width = 0.0
+
+        self.prev_time = time.time()
+
+        self.gate_direction = 1.0
+        self.avoid_flare_time = 0.0
 
         # Parameters
         self.cruise_init_interval = 5.0 # seconds
-        self.cruise_interval = 5.0
+        self.cruise_interval = 1.0
         self.cruise_direction = 1.0
         self.center_tolerance = 30 # pixels
+        self.aim_gate_1_tol = 30 # pixels
+        self.aim_gate_2_tol = 30 # pixels
+        self.forward_1m_time = 4.6 # seconds
+        self.pass_gate_finish_time = 15.0 # seconds
+        self.flare_avoid_dist = 100 # pixels
+        self.pass_flare_time = 35.0 # seconds
 
     def task_pass_gate(self):
-        if self.cur_state == 'CRUISE':
-            # TODO: Implement cruise interval logic
-            self.dx = 0.0
-            self.dy = self.speed_y * self.cruise_direction
-            self.dz = 0.0
-            self.d_yaw = 0.0
-            if self.detected['gate']:
-                self.cur_state = 'AIM_GATE'
-        elif self.cur_state == 'AIM_GATE':
-            if not self.detected['gate']:
-                self.cur_state = 'CRUISE'
-            elif abs(self.pose['gate'].x - 320) < self.center_tolerance:
-            # check if gate is centered
-                if self.detected['orange_flare']:
-                    self.cur_state = 'AVOID_FLARE'
+        self.cur_state = "NONE"
+        while self.cur_state != self.nxt_state:
+            self.cur_state = self.nxt_state
+            if self.cur_state == 'START':
+                self.nxt_state = 'CRUISE'
+                self.prev_time = time.time()
+            elif self.cur_state == 'CRUISE':
+                if time.time() - self.prev_time > self.cruise_interval:
+                    self.prev_time = time.time()
+                    self.cruise_direction *= -1.0
+                    self.cruise_interval *= 2.0
+                self.dx = 0.0
+                self.dy = self.speed_y * self.cruise_direction
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if self.detected['gate']:
+                    self.nxt_state = 'AIM_GATE_1'
+            elif self.cur_state == 'AIM_GATE_1':
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if not self.detected['gate']:
+                    pass # keep previous dx and dy
+                elif abs(self.pose['gate'].x - 320.0) < self.aim_gate_1_tol:
+                    self.prev_time = time.time()
+                    self.nxt_state = 'FORWARD_3M'
                 else:
-                    self.cur_state = 'AIM_GATE_FORWARD'
-            else:
-                if self.pose['gate'].x < 320:
-                    self.dy = self.speed_y
-                else:
-                    self.dy = self.speed_y * -1.0
+                    self.dx = 0.0
+                    if self.pose['gate'].x < 320.0:
+                        self.dy = self.speed_y * -1.0
+                    else:
+                        self.dy = self.speed_y
+            elif self.cur_state == "FORWARD_3M":
+                self.dx = self.speed_x
                 self.dy = 0.0
                 self.dz = 0.0
                 self.d_yaw = 0.0
-        elif self.cur_state == 'AIM_GATE_FORWARD':
-            self.dx = self.speed_x
-            self.dy = 0.0
-            self.dz = 0.0
-            self.d_yaw = 0.0
-            if not self.detected['gate']:
-                self.cur_state = 'FINISH'
-            elif abs(self.pose['gate'].x - 320) > self.center_tolerance:
-                self.cur_state = 'AIM_GATE'
-        elif self.cur_state == 'AVOID_FLARE':
-            # TODO: Implement avoid flare logic
-            self.dx = 0.0
-            self.dy = self.speed_y
-            self.dz = 0.0
-            self.d_yaw = 0.0
-            if True:
-                self.cur_state = 'AVOID_FLARE_FORWARD'
-        elif self.cur_state == 'AVOID_FLARE_FORWARD':
-            # TODO: Implement avoid flare forward logic
-            self.dx = self.speed_x
-            self.dy = 0.0
-            self.dz = 0.0
-            self.d_yaw = 0.0
-        elif self.cur_state == 'BACT_TO_GATE':
-            self.dx = 0.0
-            self.dy = self.speed_y * -1.0
-            self.dz = 0.0
-            self.d_yaw = 0.0
-            if self.detected['gate']:
-                self.cur_state = 'AIM_GATE'
-        elif self.cur_state == 'FINISH':
-            self.dx = 0.0
-            self.dy = 0.0
-            self.dz = 0.0
-            self.d_yaw = 0.0
-            self.cur_task = 'BUMP_FLARE'
-            self.cur_state = 'DONE'
+                if time.time() - self.prev_time > self.forward_1m_time * 3.0:
+                    flare_inside_gate = self.pose['orange_flare'].x < self.pose['gate'].x + self.gate_width / 2 and self.pose['orange_flare'].x > self.pose['gate'].x - self.gate_width / 2
+                    if self.detected['orange_flare'] and flare_inside_gate:
+                        self.prev_time = time.time()
+                        self.nxt_state = 'AVOID_FLARE'
+                    else:
+                        self.prev_time = time.time()
+                        self.nxt_state = 'FORWARD_6M'
+            elif self.cur_state == 'AVOID_FLARE':
+                self.dx = 0.0
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if self.pose['orange_flare'].x < self.pose['gate'].x:
+                    self.gate_direction = -1.0
+                else:
+                    self.gate_direction = 1.0
+                if (self.pose['orange_flare'].x - 320.0) > 0.0:
+                    self.dy = -self.speed_y
+                else:
+                    self.dy = self.speed_y
+                if abs(self.pose['orange_flare'].x - 320.0) > self.flare_avoid_dist:
+                    self.avoid_flare_time = time.time() - self.prev_time
+                    self.prev_time = time.time()
+                    self.nxt_state = 'FORWARD_6M'
+            elif self.cur_state == 'FORWARD_6M':
+                self.dx = self.speed_x
+                self.dy = 0.0
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if time.time() - self.prev_time > self.forward_1m_time * 5.5:
+                    self.prev_time = time.time()
+                    self.nxt_state = 'BACK_TO_GATE'
+            elif self.cur_state == 'BACK_TO_GATE':
+                self.dx = 0.0
+                self.dy = self.speed_y * self.gate_direction
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if self.detected['gate']:
+                    self.nxt_state = 'AIM_GATE_2'
+                elif time.time() - self.prev_time > self.avoid_flare_time:
+                    self.prev_time = time.time()
+                    self.nxt_state = 'FORWARD_5M'
+            elif self.cur_state == 'AIM_GATE_2':
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if not self.detected['gate']:
+                    pass
+                elif abs(self.pose['gate'].x - 320.0) < self.aim_gate_2_tol:
+                    self.prev_time = time.time()
+                    self.nxt_state = 'FORWARD_5M'
+            elif self.cur_state == 'FORWARD_5M':
+                self.dx = self.speed_x
+                self.dy = 0.0
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if time.time() - self.prev_time > self.forward_1m_time * 5.0:
+                    self.nxt_state = 'FINISH'
+            elif self.cur_state == 'FINISH':
+                self.dx = self.speed_x
+                self.dy = 0.0
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if time.time() - self.prev_time > self.pass_gate_finish_time:
+                    self.cur_task = 'DONE'
+                    self.nxt_state = 'CRUISE'
+                    self.dx = 0.0
+            else:
+                raise ValueError('Invalid state - ' + self.cur_state)
 
     def task_bump_flare(self):
         pass
@@ -150,7 +201,7 @@ class FSM(Node):
     #     # TODO: Implement pick ball task
 
     def main_sequence(self):
-        if self.cur_state == 'DONE':
+        if self.cur_task == 'DONE':
             self.get_logger().info('DONE')
         else:
             self.get_logger().info(self.cur_task + ' -> ' + self.cur_state)
@@ -189,21 +240,18 @@ class FSM(Node):
                 if result.hypothesis.score > 0.5:
                     self.pose[obj_name[id]] = result_pose
                     self.detected[obj_name[id]] = True
+                    if obj_name[id] == 'gate':
+                        self.gate_width = detection.bbox.size_x
             else:
                 raise ValueError('Invalid class id')
         self.main_sequence()
-
-    def timer_callback(self):
         msg = Float64MultiArray()
         msg.data = [self.dx, self.dy, self.dz, self.d_yaw]
         self.pub.publish(msg)
 
-
 def main(args=None):
     rclpy.init(args=args)
     fsm = FSM()
-    # executor = MultiThreadedExecutor()
-    # rclpy.spin(fsm, executor)
     rclpy.spin(fsm)
     fsm.destroy_node()
     rclpy.shutdown()
