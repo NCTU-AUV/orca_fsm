@@ -6,13 +6,22 @@ from vision_msgs.msg import Detection2DArray
 from vision_msgs.msg import Point2D
 
 obj_name = {
-     '0': 'blue_drum',
-     '1': 'blue_flare',
-     '2': 'gate',
-     '3': 'metal_ball',
-     '4': 'orange_flare',
-     '5': 'red_flare',
-     '6': 'yellow_flare',
+    '0': 'blue_drum',
+    '1': 'blue_flare',
+    '2': 'gate',
+    '3': 'metal_ball',
+    '4': 'orange_flare',
+    '5': 'red_flare',
+    '6': 'yellow_flare',
+}
+
+flare_order = {
+    0: ['red_flare', 'yellow_flare', 'blue_flare'],
+    1: ['yellow_flare', 'blue_flare', 'red_flare'],
+    2: ['blue_flare', 'red_flare', 'yellow_flare'],
+    3: ['red_flare', 'blue_flare', 'yellow_flare'],
+    4: ['yellow_flare', 'red_flare', 'blue_flare'],
+    5: ['blue_flare', 'yellow_flare', 'red_flare']
 }
 
 class FSM(Node):
@@ -66,11 +75,11 @@ class FSM(Node):
             'yellow_flare': False
         }
         self.gate_width = 0.0
-
         self.prev_time = time.time()
-
         self.gate_direction = 1.0
         self.avoid_flare_time = 0.0
+        self.got_water_com = False
+        self.cur_aim_flare_id = 0
 
         # Parameters
         self.cruise_init_interval = 5.0 # seconds
@@ -79,10 +88,15 @@ class FSM(Node):
         self.center_tolerance = 30 # pixels
         self.aim_gate_1_tol = 30 # pixels
         self.aim_gate_2_tol = 30 # pixels
+        self.aim_flare_tol = 30 # pixels
         self.forward_1m_time = 4.6 # seconds
         self.pass_gate_finish_time = 15.0 # seconds
         self.flare_avoid_dist = 100 # pixels
         self.pass_flare_time = 35.0 # seconds
+        self.wait_for_water_com_time = 3.0 # seconds
+        self.flare_order = 0 # default order
+        self.bump_back_timeout = 5.0
+
 
     def task_pass_gate(self):
         self.cur_state = "NONE"
@@ -188,10 +202,65 @@ class FSM(Node):
                     self.dx = 0.0
             else:
                 raise ValueError('Invalid state - ' + self.cur_state)
+            if self.cur_task != 'PASS_GATE':
+                self.nxt_state = 'START'
 
     def task_bump_flare(self):
-        pass
-        # TODO: Implement bump flare task
+        self.cur_state = "NONE"
+        cur_aim_flare = flare_order[self.flare_order][self.cur_aim_flare_id]
+        while self.cur_state != self.nxt_state:
+            self.cur_state = self.nxt_state
+            if self.cur_state == 'START':
+                self.nxt_state = 'WAIT'
+                self.prev_time = time.time()
+            elif self.cur_state == 'FIND_FLARE':
+                # TODO: Implement find flare 
+                self.dx = 0.0
+                self.dy = 0.0
+                self.dz = 0.0
+                self.d_yaw = 0.0
+            elif self.cur_state == 'WAIT':
+                if self.got_water_com or time.time() - self.prev_time > 10.0:
+                    self.nxt_state = 'AIM'
+                else:
+                    self.dx = 0.0
+                    self.dy = 0.0
+                    self.dz = 0.0
+                    self.d_yaw = 0.0
+            elif self.cur_state == 'AIM':
+                if self.detected[cur_aim_flare]:
+                    if abs(self.pose[cur_aim_flare].x - 320.0) < self.aim_flare_tol:
+                        self.prev_time = time.time()
+                        self.nxt_state = 'BUMP_FLARE_FORWARD'
+                    elif self.pose[cur_aim_flare].x < 320.0:
+                        self.dy = -self.speed_y
+                    else:
+                        self.dy = self.speed_y
+                else:
+                    self.nxt_state = 'FIND_FLARE'
+            elif self.cur_state == 'BUMP_FLARE_FORWARD':
+                self.dx = self.speed_x
+                self.dy = 0.0
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if not self.detected[cur_aim_flare]:
+                    if self.cur_aim_flare_id == 3:
+                        self.cur_task = 'DONE'
+                    else:
+                        self.prev_time = time.time()
+                        self.cur_aim_flare_id += 1
+                        self.nxt_state = 'BUMP_FLARE_BACK'
+            elif self.cur_state == 'BUMP_FLARE_BACK':
+                self.dx = -self.speed_x
+                self.dy = 0.0
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if self.detected[cur_aim_flare] or time.time() - self.prev_time > self.bump_back_timeout:
+                    self.nxt_state = 'AIM'
+            else:
+                raise ValueError('Invalid state - ' + self.cur_state)
+                
+        
 
     # def task_drop_ball(self):
     #     # TODO: Implement drop ball task
