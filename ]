@@ -80,7 +80,6 @@ class FSM(Node):
         self.avoid_flare_time = 0.0
         self.got_water_com = False
         self.cur_aim_flare_id = 0
-        self.flare_down_check_cnt = 0
 
         # Parameters
         self.cruise_init_interval = 5.0 # seconds
@@ -96,7 +95,7 @@ class FSM(Node):
         self.pass_flare_time = 35.0 # seconds
         self.wait_for_water_com_time = 3.0 # seconds
         self.flare_order_com = 0 # default order
-        self.bump_back_timeout = 20.0 # seconds
+        self.bump_back_timeout = 5.0
 
 
     def task_pass_gate(self):
@@ -212,8 +211,7 @@ class FSM(Node):
         while self.cur_state != self.nxt_state:
             self.cur_state = self.nxt_state
             if self.cur_state == 'START':
-                # self.nxt_state = 'WAIT' # Real
-                self.nxt_state = 'AIM' # For testing
+                self.nxt_state = 'WAIT'
                 self.prev_time = time.time()
             elif self.cur_state == 'FIND_FLARE':
                 # TODO: Implement find flare 
@@ -230,39 +228,32 @@ class FSM(Node):
                     self.dz = 0.0
                     self.d_yaw = 0.0
             elif self.cur_state == 'AIM':
-                self.dx = 0.0
                 if self.detected[cur_aim_flare]:
                     if abs(self.pose[cur_aim_flare].x - 320.0) < self.aim_flare_tol:
                         self.prev_time = time.time()
                         self.nxt_state = 'BUMP_FLARE_FORWARD'
                     elif self.pose[cur_aim_flare].x < 320.0:
-                        self.dy = -self.speed_y * 0.7
+                        self.dy = -self.speed_y
                     else:
-                        self.dy = self.speed_y * 0.7
+                        self.dy = self.speed_y
+                else:
+                    self.nxt_state = 'AIM_FIND_FLARE'
+            elif self.cur_state == 'AIM_FIND_FLARE':
+
             elif self.cur_state == 'BUMP_FLARE_FORWARD':
-                self.dx = self.speed_x * 1.5
+                self.dx = self.speed_x
                 self.dy = 0.0
                 self.dz = 0.0
                 self.d_yaw = 0.0
                 if not self.detected[cur_aim_flare]:
-                    self.flare_down_check_cnt = 0
-                    self.nxt_state = 'CHECK_FLARE_DOWN'
-                elif abs(self.pose[cur_aim_flare].x - 320.0) > self.aim_flare_tol:
-                    self.nxt_state = 'AIM'
-            elif self.cur_state == 'CHECK_FLARE_DOWN':
-                if self.detected[cur_aim_flare]:
-                    self.nxt_state = 'BUMP_FLARE_FORWARD'
-                else:
-                    self.flare_down_check_cnt += 1
-                    if self.flare_down_check_cnt > 6:
-                        if self.cur_aim_flare_id == 2:
-                            self.cur_task = 'DONE'
-                        else:
-                            self.prev_time = time.time()
-                            self.cur_aim_flare_id += 1
-                            self.nxt_state = 'BUMP_FLARE_BACK'
+                    if self.cur_aim_flare_id == 3:
+                        self.cur_task = 'DONE'
+                    else:
+                        self.prev_time = time.time()
+                        self.cur_aim_flare_id += 1
+                        self.nxt_state = 'BUMP_FLARE_BACK'
             elif self.cur_state == 'BUMP_FLARE_BACK':
-                self.dx = -self.speed_x * 1.5
+                self.dx = -self.speed_x
                 self.dy = 0.0
                 self.dz = 0.0
                 self.d_yaw = 0.0
@@ -316,7 +307,7 @@ class FSM(Node):
                     continue
                 score_dict[id] = result.hypothesis.score
             if id in obj_name:
-                if result.hypothesis.score > 0.1:
+                if result.hypothesis.score > 0.3:
                     self.pose[obj_name[id]] = result_pose
                     self.detected[obj_name[id]] = True
                     if obj_name[id] == 'gate':
