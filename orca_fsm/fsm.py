@@ -1,9 +1,11 @@
 import time
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float64MultiArray, Float64
+from rclpy.executors import MultiThreadedExecutor
+from std_msgs.msg import Float64MultiArray, Float64, Int8
 from vision_msgs.msg import Detection2DArray
 from vision_msgs.msg import Point2D
+from sensor_msgs.msg import Image
 
 obj_name = {
     '0': 'blue_drum',
@@ -29,6 +31,10 @@ class FSM(Node):
     def __init__(self):
         super().__init__('orca_fsm')
 
+        # default mode is sim
+        self.declare_parameter('mode', 'sim')
+        self.mode = self.get_parameter('mode').value
+
         self.detection_sub = self.create_subscription(
             Detection2DArray,
             'detections_output',
@@ -36,13 +42,61 @@ class FSM(Node):
             10)
         self.detection_sub  # prevent unused variable warning
 
+        if mode == 'real':
+            # TODO: Change topic name
+            self.front_cam_sub = self.create_subscription(
+                Image,
+                'front_cam_img',
+                self.front_cam_cb,
+                10)
+            self.front_cam_sub
+
+            self.bottom_cam_sub = self.create_subscription(
+                Image,
+                'bottom_cam_img',
+                self.bottom_cam_cb,
+                10)
+            self.bottom_cam_sub
+
+            self.cam_pub = self.create_publisher(
+                Image,
+                'image',
+                10)
+        else:
+            self.front_cam_sub = self.create_subscription(
+                Image,
+                '/sauvc_sim/bottom_camera/image_raw',
+                self.front_cam_cb,
+                10)
+            self.front_cam_sub
+
+            self.bottom_cam_sub = self.create_subscription(
+                Image,
+                'stereo_camera/left/image',
+                self.bottom_cam_cb,
+                10)
+            self.bottom_cam_sub
+
+            self.cam_pub = self.create_publisher(
+                Image,
+                'image',
+                10)
+
         self.pub = self.create_publisher(
             Float64MultiArray,
             'fsm_output',
             10)
+        
+        # arm control
+        # 0: idle, 1: drop, 2: stretch out, 3: stretch in
+        self.arm_pub = self.create_publisher(
+            Int8,
+            'arm_control',
+            10)
+        self.arm_pub.publish(Int8(data=0))
 
         # Varaibles
-        self.cur_task = 'BUMP_FLARE'
+        self.cur_task = 'DROP_BALL'
         self.cur_state = 'NONE'
         self.nxt_state = 'START'
 
@@ -81,6 +135,7 @@ class FSM(Node):
         self.got_water_com = False
         self.cur_aim_flare_id = 0
         self.flare_down_check_cnt = 0
+        self.use_bottom_cam = False
 
         # Parameters
         self.cruise_init_interval = 5.0 # seconds
@@ -90,6 +145,7 @@ class FSM(Node):
         self.aim_gate_1_tol = 30 # pixels
         self.aim_gate_2_tol = 30 # pixels
         self.aim_flare_tol = 30 # pixels
+        self.aim_drum_tol = 30 # pixels
         self.forward_1m_time = 4.6 # seconds
         self.pass_gate_finish_time = 15.0 # seconds
         self.flare_avoid_dist = 100 # pixels
@@ -273,9 +329,53 @@ class FSM(Node):
                 
         
 
-    # def task_drop_ball(self):
-    #     # TODO: Implement drop ball task
-    #
+    def task_drop_ball(self):
+        # TODO: Implement drop ball task
+        self.cur_task = 'NONE'
+        while self.cur_state != self.nxt_state:
+            self.cur_state = self.nxt_state
+            if self.cur_state == 'START':
+                self.nxt_state = 'CRUISE'
+                self.prev_time = time.time()
+            elif self.cur_state == 'CRUISE':
+                if time.time() - self.prev_time > self.cruise_interval:
+                    self.prev_time = time.time()
+                    self.cruise_direction *= -1.0
+                    self.cruise_interval *= 2.0
+                self.dx = 0.0
+                self.dy = self.speed_y * self.cruise_direction
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if self.detected['blue_drum']:
+                    self.nxt_state = 'AIM_DRUM_FRONT'
+            elif self.cur_state == 'AIM_DRUM_FRONT':
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if not self.detected['blue_drum']:
+                    pass # keep previous dx and dy
+                elif abs(self.pose['blue_drum'].x - 320.0) < self.aim_drum_tol:
+                    self.prev_time = time.time()
+                    self.nxt_state = 'FORWARD'
+                else:
+                    self.dx = 0.0
+                    if self.pose['blue_drum'].x < 320.0:
+                        self.dy = self.speed_y * -1.0
+                    else:
+                        self.dy = self.speed_y
+            elif self.cur_state == "FORWARD":
+                self.dx = self.speed_x
+                self.dy = 0.0
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if not detected['blue_drum']:
+                    self.nxt_state = 'BOTTOM_AIM'
+                elif abs(self.pose['blue_drum'].y - 320.0) > self.aim_drum_tol:
+                    self.nxt_state = 'AIM_DRUM_FRONT'
+            elif self.cur_state == 'BOTTOM_AIM':
+                # TODO: Implement bottom aim
+                pass
+
+
     # def task_pick_ball(self):
     #     # TODO: Implement pick ball task
 
@@ -288,10 +388,10 @@ class FSM(Node):
             self.task_pass_gate()
         elif self.cur_task == 'BUMP_FLARE':
             self.task_bump_flare()
-        # elif self.cur_task == 'DROP_BALL':
-        #     self.task_drop_ball()
-        # elif self.cur_task == 'PICK_BALL':
-        #     self.task_pick_ball()
+        elif self.cur_task == 'DROP_BALL':
+            self.task_drop_ball()
+        elif self.cur_task == 'PICK_BALL':
+            self.task_pick_ball()
         elif self.cur_task == 'DONE':
             self.dx = 0.0
             self.dy = 0.0
@@ -328,10 +428,19 @@ class FSM(Node):
         msg.data = [self.dx, self.dy, self.dz, self.d_yaw]
         self.pub.publish(msg)
 
+    def front_cam_cb(self, img_msg):
+        if not self.use_bottom_cam:
+            self.cam_pub.publish(img_msg)
+
+    def bottom_cam_cb(self, img_msg):
+        if self.use_bottom_cam:
+            self.cam_pub.publish(img_msg)
+
 def main(args=None):
     rclpy.init(args=args)
     fsm = FSM()
-    rclpy.spin(fsm)
+    executor = MultiThreadedExecutor()
+    rclpy.spin(fsm, executor)
     fsm.destroy_node()
     rclpy.shutdown()
 
