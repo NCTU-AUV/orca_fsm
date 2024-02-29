@@ -146,6 +146,8 @@ class FSM(Node):
         self.aim_gate_2_tol = 30 # pixels
         self.aim_flare_tol = 30 # pixels
         self.aim_drum_tol = 30 # pixels
+        self.aim_drum_tol_bottom = 30 # pixels
+        self.aim_metal_ball_tol = 30 # pixels
         self.forward_1m_time = 4.6 # seconds
         self.pass_gate_finish_time = 15.0 # seconds
         self.flare_avoid_dist = 100 # pixels
@@ -153,6 +155,10 @@ class FSM(Node):
         self.wait_for_water_com_time = 3.0 # seconds
         self.flare_order_com = 0 # default order
         self.bump_back_timeout = 20.0 # seconds
+        self.drop_ball_time = 3.0 # seconds
+        self.arm_stretch_out_time = 3.0 # seconds
+        self.arm_stretch_in_time = 3.0
+        self.leave_area_time = 5.0 # seconds
 
 
     def task_pass_gate(self):
@@ -330,13 +336,14 @@ class FSM(Node):
         
 
     def task_drop_ball(self):
-        # TODO: Implement drop ball task
         self.cur_task = 'NONE'
         while self.cur_state != self.nxt_state:
             self.cur_state = self.nxt_state
             if self.cur_state == 'START':
                 self.nxt_state = 'CRUISE'
                 self.prev_time = time.time()
+                self.cruise_direction = 1.0
+                self.cruise_interval = self.cruise_init_interval
             elif self.cur_state == 'CRUISE':
                 if time.time() - self.prev_time > self.cruise_interval:
                     self.prev_time = time.time()
@@ -368,16 +375,141 @@ class FSM(Node):
                 self.dz = 0.0
                 self.d_yaw = 0.0
                 if not detected['blue_drum']:
+                    self.cur_state = 'BOTTOM_AIM' # to escape from loop
                     self.nxt_state = 'BOTTOM_AIM'
+                    self.use_bottom_cam = True
                 elif abs(self.pose['blue_drum'].y - 320.0) > self.aim_drum_tol:
                     self.nxt_state = 'AIM_DRUM_FRONT'
             elif self.cur_state == 'BOTTOM_AIM':
-                # TODO: Implement bottom aim
-                pass
+                self.use_bottom_cam = True
+                if not self.detected['blue_drum']:
+                    pass # keep previous dx and dy
+                elif abs(self.pose['blue_drum'].y - 320.0) < self.aim_drum_tol_bottom:
+                    self.prev_time = time.time()
+                    self.nxt_state = 'DROP'
+                    self.use_bottom_cam = False
+                else:
+                    self.dy = 0.0
+                    if self.pose['blue_drum'].y < 320.0:
+                        self.dx = self.speed_x * -1.0
+                    else:
+                        self.dx = self.speed_x
+            elif self.cur_state == 'DROP':
+                self.dx = 0.0
+                self.dy = 0.0
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                self.arm_pub.publish(Int8(data=1))
+                if time.time() - self.prev_time > self.drop_ball_time:
+                    self.cur_task = 'PICK_BALL'
+                    self.cur_state = 'START'
+                    self.nxt_state = 'START'
+            else:
+                raise ValueError('Invalid state - ' + self.cur_state)
 
 
-    # def task_pick_ball(self):
-    #     # TODO: Implement pick ball task
+    def task_pick_ball(self):
+        self.cur_state = 'NONE'
+        while self.cur_state != self.nxt_state:
+            self.cur_state = self.nxt_state
+            if self.cur_state == 'START':
+                self.nxt_state = 'LEAVE_AREA'
+                self.prev_time = time.time()
+            elif self.cur_state == 'LEAVE_AREA':
+                self.dx = self.speed_x * -1.0
+                self.dy = 0.0
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if time.time() - self.prev_time > self.leave_area_time:
+                    self.cruise_direction = 10.0
+                    self.cruise_interval = self.cruise_init_interval
+                    self.prev_time = time.time()
+                    self.nxt_state = 'CRUISE'
+            elif self.cur_state == 'CRUISE':
+                if time.time() - self.prev_time > self.cruise_interval:
+                    self.prev_time = time.time()
+                    self.cruise_direction *= -1.0
+                    self.cruise_interval *= 2.0
+                self.dx = 0.0
+                self.dy = self.speed_y * self.cruise_direction
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if self.detected['blue_drum']:
+                    self.nxt_state = 'AIM_DRUM_FRONT'
+            elif self.cur_state == 'AIM_DRUM_FRONT':
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if not self.detected['blue_drum']:
+                    pass # keep previous dx and dy
+                elif abs(self.pose['blue_drum'].x - 320.0) < self.aim_drum_tol:
+                    self.prev_time = time.time()
+                    self.nxt_state = 'FORWARD'
+                else:
+                    self.dx = 0.0
+                    if self.pose['blue_drum'].x < 320.0:
+                        self.dy = self.speed_y * -1.0
+                    else:
+                        self.dy = self.speed_y
+            elif self.cur_state == "FORWARD":
+                self.dx = self.speed_x
+                self.dy = 0.0
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                if not detected['blue_drum']:
+                    self.cur_state = 'BOTTOM_AIM_DRUM' # to escape from loop
+                    self.nxt_state = 'BOTTOM_AIM_DRUM'
+                    self.use_bottom_cam = True
+                elif abs(self.pose['blue_drum'].y - 320.0) > self.aim_drum_tol:
+                    self.nxt_state = 'AIM_DRUM_FRONT'
+            elif self.cur_state == 'BOTTOM_AIM_DRUM':
+                self.use_bottom_cam = True
+                if not self.detected['blue_drum']:
+                    pass # keep previous dx and dy
+                elif abs(self.pose['blue_drum'].y - 320.0) < self.aim_drum_tol_bottom:
+                    self.prev_time = time.time()
+                    self.nxt_state = 'BOTTOM_AIM_BALL'
+                    self.use_bottom_cam = False
+                else:
+                    self.dy = 0.0
+                    if self.pose['blue_drum'].y < 320.0:
+                        self.dx = self.speed_x * -1.0
+                    else:
+                        self.dx = self.speed_x
+            elif self.cur_state == 'BOTTOM_AIM_BALL':
+                self.use_bottom_cam = True
+                if not self.detected['metal_ball']:
+                    pass # keep previous dx and dy
+                elif abs(self.pose['metal_ball'].y - 320.0) < self.aim_metal_ball_tol and
+                    abs(self.pose['metal_ball'].x - 320.0) < self.aim_metal_ball_tol:
+                    self.prev_time = time.time()
+                    self.nxt_state = 'STRETCH_OUT'
+                    self.use_bottom_cam = False
+                else:
+                    self.dy = 0.0
+                    if self.pose['blue_drum'].y < 320.0:
+                        self.dx = self.speed_x * -1.0
+                    else:
+                        self.dx = self.speed_x
+            elif self.cur_state == 'STRETCH_OUT':
+                self.dx = 0.0
+                self.dy = 0.0
+                self.dz = 0.0
+                self.d_yaw = 0.0
+                self.arm_pub.publish(Int8(data=2))
+                if time.time() - self.prev_time > self.arm_stretch_out_time:
+                    self.prev_time = time.time()
+                    self.nxt_state = 'STRETCH_IN'
+            elif self.cur_state == 'STRETCH_IN':
+                self.arm_pub.publish(Int8(data=3))
+                if time.time() - self.prev_time > self.arm_stretch_in_time:
+                    self.cur_task = 'CHECK_BALL'
+            elif self.cur_state == 'CHECK_BALL':
+                if not self.detected['metal_ball']:
+                    self.cur_task = 'DONE'
+                else: # keep trying to pick the ball
+                    self.nxt_state = 'BOTTOM_AIM_BALL'
+            else:
+                raise ValueError('Invalid state - ' + self.cur_state)
 
     def main_sequence(self):
         if self.cur_task == 'DONE':
@@ -416,7 +548,10 @@ class FSM(Node):
                     continue
                 score_dict[id] = result.hypothesis.score
             if id in obj_name:
-                if result.hypothesis.score > 0.1:
+                hyp_threshold = 0.5
+                if id == '1' or id == '5' or id == '6': # flares
+                    hyp_threshold = 0.2
+                if result.hypothesis.score > hyp_threshold:
                     self.pose[obj_name[id]] = result_pose
                     self.detected[obj_name[id]] = True
                     if obj_name[id] == 'gate':
