@@ -42,11 +42,11 @@ class FSM(Node):
             10)
         self.detection_sub  # prevent unused variable warning
 
-        if mode == 'real':
+        if self.mode == 'real':
             # TODO: Change topic name
             self.front_cam_sub = self.create_subscription(
                 Image,
-                'front_cam_img',
+                '/camera/color/image_raw', # realsense
                 self.front_cam_cb,
                 10)
             self.front_cam_sub
@@ -65,14 +65,14 @@ class FSM(Node):
         else:
             self.front_cam_sub = self.create_subscription(
                 Image,
-                '/sauvc_sim/bottom_camera/image_raw',
+                'stereo_camera/left/image',
                 self.front_cam_cb,
                 10)
             self.front_cam_sub
 
             self.bottom_cam_sub = self.create_subscription(
                 Image,
-                'stereo_camera/left/image',
+                '/sauvc_sim/bottom_camera/image_raw',
                 self.bottom_cam_cb,
                 10)
             self.bottom_cam_sub
@@ -336,7 +336,7 @@ class FSM(Node):
         
 
     def task_drop_ball(self):
-        self.cur_task = 'NONE'
+        self.cur_state = 'NONE'
         while self.cur_state != self.nxt_state:
             self.cur_state = self.nxt_state
             if self.cur_state == 'START':
@@ -362,6 +362,7 @@ class FSM(Node):
                     pass # keep previous dx and dy
                 elif abs(self.pose['blue_drum'].x - 320.0) < self.aim_drum_tol:
                     self.prev_time = time.time()
+                    self.cur_state = 'FORWARD'
                     self.nxt_state = 'FORWARD'
                 else:
                     self.dx = 0.0
@@ -374,7 +375,7 @@ class FSM(Node):
                 self.dy = 0.0
                 self.dz = 0.0
                 self.d_yaw = 0.0
-                if not detected['blue_drum']:
+                if not self.detected['blue_drum']:
                     self.cur_state = 'BOTTOM_AIM' # to escape from loop
                     self.nxt_state = 'BOTTOM_AIM'
                     self.use_bottom_cam = True
@@ -479,8 +480,7 @@ class FSM(Node):
                 self.use_bottom_cam = True
                 if not self.detected['metal_ball']:
                     pass # keep previous dx and dy
-                elif abs(self.pose['metal_ball'].y - 320.0) < self.aim_metal_ball_tol and
-                    abs(self.pose['metal_ball'].x - 320.0) < self.aim_metal_ball_tol:
+                elif abs(self.pose['metal_ball'].y - 320.0) < self.aim_metal_ball_tol and abs(self.pose['metal_ball'].x - 320.0) < self.aim_metal_ball_tol:
                     self.prev_time = time.time()
                     self.nxt_state = 'STRETCH_OUT'
                     self.use_bottom_cam = False
