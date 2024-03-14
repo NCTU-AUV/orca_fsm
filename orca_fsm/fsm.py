@@ -1,4 +1,7 @@
 import time
+import cv2
+from cv_bridge import CvBridge
+import threading
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
@@ -31,8 +34,8 @@ class FSM(Node):
     def __init__(self):
         super().__init__('orca_fsm')
 
-        # default mode is sim
-        self.declare_parameter('mode', 'sim')
+        # default mode is real
+        self.declare_parameter('mode', 'real')
         self.mode = self.get_parameter('mode').value
 
         self.detection_sub = self.create_subscription(
@@ -42,21 +45,19 @@ class FSM(Node):
             10)
         self.detection_sub  # prevent unused variable warning
 
+        self.cap = None
+        self.cur_frame_msg = Image()
+
         if self.mode == 'real':
-            # TODO: Change topic name
             self.front_cam_sub = self.create_subscription(
                 Image,
-                '/camera/color/image_raw', # realsense
+                '/color/image_raw', # realsense
                 self.front_cam_cb,
                 10)
             self.front_cam_sub
 
-            self.bottom_cam_sub = self.create_subscription(
-                Image,
-                'bottom_cam_img',
-                self.bottom_cam_cb,
-                10)
-            self.bottom_cam_sub
+            self.init_bottom_cam()
+            self.cv_bridge = CvBridge()
 
             self.cam_pub = self.create_publisher(
                 Image,
@@ -96,7 +97,7 @@ class FSM(Node):
         self.arm_pub.publish(Int8(data=0))
 
         # Varaibles
-        self.cur_task = 'DROP_BALL'
+        self.cur_task = 'TEST_CAM_SWITCH'
         self.cur_state = 'NONE'
         self.nxt_state = 'START'
 
@@ -511,6 +512,22 @@ class FSM(Node):
             else:
                 raise ValueError('Invalid state - ' + self.cur_state)
 
+    def task_test_cam_switch(self):
+        self.cur_state = 'NONE'
+        while self.cur_state != self.nxt_state:
+            self.cur_state = self.nxt_state
+            if self.cur_state == 'START':
+                self.prev_time = time.time()
+                self.nxt_state = 'FRONT_AIM'
+            elif self.cur_state == 'FRONT_AIM':
+                if time.time() - self.prev_time > 5.0:
+                    self.prev_time = time.time()
+                    self.use_bottom_cam = True
+                    self.nxt_state = 'BOTTOM_AIM'
+            elif self.cur_state == 'BOTTOM_AIM':
+                if not self.detected['blue_drum']:
+                    pass
+
     def main_sequence(self):
         if self.cur_task == 'DONE':
             self.get_logger().info('DONE')
@@ -524,6 +541,8 @@ class FSM(Node):
             self.task_drop_ball()
         elif self.cur_task == 'PICK_BALL':
             self.task_pick_ball()
+        elif self.cur_task == 'TEST_CAM_SWITCH':
+            self.task_test_cam_switch()
         elif self.cur_task == 'DONE':
             self.dx = 0.0
             self.dy = 0.0
@@ -565,17 +584,45 @@ class FSM(Node):
 
     def front_cam_cb(self, img_msg):
         if not self.use_bottom_cam:
-            self.cam_pub.publish(img_msg)
+            self.cur_frame_msg = img_msg
 
     def bottom_cam_cb(self, img_msg):
         if self.use_bottom_cam:
-            self.cam_pub.publish(img_msg)
+            self.cur_frame_msg = img_msg
+
+    def init_bottom_cam(self):
+        self.cap = cv2.VideoCapture(6)
+        if not self.cap.isOpened():
+            self.get_logger().info('Error: Cannot open bottom camera')
+            return
+        self.get_logger().info('Bottom camera opened')
+
+    def pub_image(self):
+        if self.mode == 'real':
+            if self.use_bottom_cam:
+                ret, frame = self.cap.read()
+                if ret: 
+                    frame_msg = self.cv_bridge.cv2_to_imgmsg(frame, encoding='bgr8')
+                    self.cam_pub.publish(frame_msg)
+            else:
+                self.cam_pub.publish(self.cur_frame_msg)
+        else:
+            self.cam_pub.publish(self.cur_frame_msg)
+
 
 def main(args=None):
     rclpy.init(args=args)
     fsm = FSM()
     executor = MultiThreadedExecutor()
-    rclpy.spin(fsm, executor)
+
+    spin_thread = threading.Thread(target=rclpy.spin, args=(fsm, executor))
+    spin_thread.start()
+
+    rate = fsm.create_rate(5)
+    while rclpy.ok():
+        fsm.pub_image()
+        rate.sleep()
+
     fsm.destroy_node()
     rclpy.shutdown()
 
