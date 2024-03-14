@@ -533,6 +533,7 @@ class FSM(Node):
             self.get_logger().info('DONE')
         else:
             self.get_logger().info(self.cur_task + ' -> ' + self.cur_state)
+        self.show_detection()
         if self.cur_task == 'PASS_GATE':
             self.task_pass_gate()
         elif self.cur_task == 'BUMP_FLARE':
@@ -581,6 +582,13 @@ class FSM(Node):
         msg = Float64MultiArray()
         msg.data = [self.dx, self.dy, self.dz, self.d_yaw]
         self.pub.publish(msg)
+
+    def show_detection(self):
+        for key in self.detected.keys():
+            if self.detected[key]:
+                self.get_logger().info(key + ' detected at (' + str(self.pose[key].x) + ', ' + str(self.pose[key].y) + ')')
+            else:
+                self.get_logger().info(key + ' not detected')
 
     def front_cam_cb(self, img_msg):
         if not self.use_bottom_cam:
