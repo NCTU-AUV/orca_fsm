@@ -17,7 +17,10 @@ class Bridge(Node):
         self.mode = self.get_parameter('mode').value
 
         if self.mode == 'real':
-            self.real_scale = 1.0
+            self.real_x_scale = 1.0
+            self.real_y_scale = 1.0
+            self.real_z_scale = 1.0
+            self.real_yaw_scalre = 1.0
             # subscribe to fsm output
             self.sub = self.create_subscription(
                 Float64MultiArray,
@@ -58,8 +61,10 @@ class Bridge(Node):
             raise ValueError(f'unknown mode: {self.mode}')
 
     def real_callback(self, msg):
-        msg.data[0] *= self.real_scale  # x
-        msg.data[1] *= self.real_scale  # y
+        msg.data[0] *= self.real_x_scale # x
+        msg.data[1] *= self.real_y_scale # y
+        msg.data[2] *= self.real_z_scale # z
+        msg.data[3] *= self.real_yaw_scale # yaw
         self.get_logger().info('msg: "%s"' % msg.data)
         self.pub.publish(msg)
 
