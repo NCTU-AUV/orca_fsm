@@ -17,7 +17,7 @@ class KeyboardController(Node):
         self.dx = 0.0
         self.dy = 0.0
         self.dz = 0.0
-        self.d_yaw = 0.0
+        self.yaw = 0.0
         # arm control 0: idle, 1: drop, 2: stretch out, 3: stretch in
         self.arm_state = 0
 
@@ -49,55 +49,55 @@ class KeyboardController(Node):
             self.dx = self.LIN_VEL_STEP
             self.dy = 0.0
             self.dz = 0.0
-            self.d_yaw = 0.0
+            target_yaw = self.yaw
             self.get_logger().info("front")
         elif key == 'a':
             self.dx = 0.0
             self.dy = -self.LIN_VEL_STEP
             self.dz = 0.0
-            self.d_yaw = 0.0
+            target_yaw = self.yaw
             self.get_logger().info("left")
         elif key == 's':
             self.dx = -self.LIN_VEL_STEP
             self.dy = 0.0
             self.dz = 0.0
-            self.d_yaw = 0.0
+            target_yaw = self.yaw
             self.get_logger().info("back")
         elif key == 'd':
             self.dx = 0.0
             self.dy = self.LIN_VEL_STEP
             self.dz = 0.0
-            self.d_yaw = 0.0
+            target_yaw = self.yaw
             self.get_logger().info("right")
         elif key == 'k':
             self.dx = 0.0
             self.dy = 0.0
             self.dz = self.LIN_VEL_STEP
-            self.d_yaw = 0.0
+            target_yaw = self.yaw
             self.get_logger().info("up")
         elif key == 'j':
             self.dx = 0.0
             self.dy = 0.0
             self.dz = -self.LIN_VEL_STEP
-            self.d_yaw = 0.0
+            target_yaw = self.yaw
             self.get_logger().info("down")
         elif key == 'h':
             self.dx = 0.0
             self.dy = 0.0
             self.dz = 0.0
-            self.d_yaw = self.ANG_VEL_STEP
+            target_yaw = self.yaw + self.ANG_VEL_STEP * 90.0
             self.get_logger().info("yaw_left")
         elif key == 'l':
             self.dx = 0.0
             self.dy = 0.0
             self.dz = 0.0
-            self.d_yaw = -self.ANG_VEL_STEP
+            target_yaw = self.yaw - self.ANG_VEL_STEP * 90.0
             self.get_logger().info("yaw_right")
         elif key == 'q':
             self.dx = 0.0
             self.dy = 0.0
             self.dz = 0.0
-            self.d_yaw = 0.0
+            target_yaw = self.yaw
             self.get_logger().info("stop")
         elif key == 'u':
             self.arm_state = 0
@@ -113,7 +113,7 @@ class KeyboardController(Node):
             self.get_logger().info("stretch in")
 
         msg = Float64MultiArray()
-        msg.data = [self.dx, self.dy, self.dz, self.d_yaw]
+        msg.data = [self.dx, self.dy, self.dz, target_yaw, self.arm_state]
         self.pub.publish(msg)
 
 def main():
