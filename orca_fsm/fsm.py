@@ -5,7 +5,7 @@ import threading
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-from std_msgs.msg import Float64MultiArray, Float64, Int8
+from std_msgs.msg import Float32MultiArray, Float64, Int8
 from vision_msgs.msg import Detection2DArray
 from vision_msgs.msg import Point2D
 from sensor_msgs.msg import Image
@@ -84,7 +84,7 @@ class FSM(Node):
                 10)
 
         self.pub = self.create_publisher(
-            Float64MultiArray,
+            Float32MultiArray,
             'fsm_output',
             10)
         
@@ -573,7 +573,7 @@ class FSM(Node):
             else:
                 raise ValueError('Invalid class id')
         self.main_sequence()
-        msg = Float64MultiArray()
+        msg = Float32MultiArray()
         msg.data = [self.dx, self.dy, self.dz, self.d_yaw, self.arm_state]
         self.pub.publish(msg)
 

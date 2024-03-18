@@ -6,7 +6,7 @@ from select import select
 import termios
 import tty
 import threading
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float32MultiArray
 
 
 class KeyboardController(Node):
@@ -28,7 +28,7 @@ class KeyboardController(Node):
         self.key_timeout = 0.5
 
         self.pub = self.create_publisher(
-            Float64MultiArray,
+            Float32MultiArray,
             'fsm_output',
             10)
         
@@ -113,7 +113,7 @@ class KeyboardController(Node):
             self.arm_state = 3.0
             self.get_logger().info("stretch in")
 
-        msg = Float64MultiArray()
+        msg = Float32MultiArray()
         msg.data = [self.dx, self.dy, self.dz, target_yaw, self.arm_state]
         self.pub.publish(msg)
 

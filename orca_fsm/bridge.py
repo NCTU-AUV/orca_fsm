@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 
-from std_msgs.msg import Float64MultiArray
+from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
 # from gazebo_msgs.srv import SetEntityState
 # from gazebo_msgs.msg import ModelStates
@@ -23,13 +23,13 @@ class Bridge(Node):
             self.real_yaw_scale = 1.0
             # subscribe to fsm output
             self.sub = self.create_subscription(
-                Float64MultiArray,
+                Float32MultiArray,
                 'fsm_output',
                 self.real_callback,
                 10)
             # publish target pose to controller
             self.pub = self.create_publisher(
-                Float64MultiArray,
+                Float32MultiArray,
                 'target',
                 10,
             )
@@ -38,7 +38,7 @@ class Bridge(Node):
             self.sim_scale = 0.2
             # subscribe to fsm output
             self.sub = self.create_subscription(
-                Float64MultiArray,
+                Float32MultiArray,
                 'fsm_output',
                 self.sim_callback,
                 10)
