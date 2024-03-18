@@ -18,6 +18,8 @@ class KeyboardController(Node):
         self.dy = 0.0
         self.dz = 0.0
         self.d_yaw = 0.0
+        # arm control 0: idle, 1: drop, 2: stretch out, 3: stretch in
+        self.arm_state = 0
 
         self.LIN_VEL_STEP = 1.0
         self.ANG_VEL_STEP = 1.0
@@ -97,6 +99,18 @@ class KeyboardController(Node):
             self.dz = 0.0
             self.d_yaw = 0.0
             self.get_logger().info("stop")
+        elif key == 'u':
+            self.arm_state = 0
+            self.get_logger().info("idle")
+        elif key == 'i':
+            self.arm_state = 1
+            self.get_logger().info("drop")
+        elif key == 'o':
+            self.arm_state = 2
+            self.get_logger().info("stretch out")
+        elif key == 'p':
+            self.arm_state = 3
+            self.get_logger().info("stretch in")
 
         msg = Float64MultiArray()
         msg.data = [self.dx, self.dy, self.dz, self.d_yaw]
