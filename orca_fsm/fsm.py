@@ -16,7 +16,8 @@ obj_name = {
     '2': 'gate',
     '3': 'metal_ball',
     '4': 'orange_flare',
-    '5': 'red_flare', '6': 'yellow_flare',
+    '5': 'red_flare',
+    '6': 'yellow_flare',
 }
 
 flare_order = {
@@ -97,7 +98,7 @@ class FSM(Node):
         self.dz = 0.0 # up > 0
         self.d_yaw = 0.0 # cw > 0
         # arm control 0: idle, 1: drop, 2: stretch out, 3: stretch in
-        self.arm_state = 0
+        self.arm_state = 0.0
 
         self.speed_x = 1.0
         self.speed_y = 1.0
@@ -394,7 +395,7 @@ class FSM(Node):
                 self.dy = 0.0
                 self.dz = 0.0
                 self.d_yaw = 0.0
-                self.arm_state = 1
+                self.arm_state = 1.0
                 if time.time() - self.prev_time > self.drop_ball_time:
                     self.cur_task = 'PICK_BALL'
                     self.cur_state = 'START'
@@ -489,12 +490,12 @@ class FSM(Node):
                 self.dy = 0.0
                 self.dz = 0.0
                 self.d_yaw = 0.0
-                self.arm_state = 2
+                self.arm_state = 2.0
                 if time.time() - self.prev_time > self.arm_stretch_out_time:
                     self.prev_time = time.time()
                     self.nxt_state = 'STRETCH_IN'
             elif self.cur_state == 'STRETCH_IN':
-                self.arm_state = 3
+                self.arm_state = 3.0
                 if time.time() - self.prev_time > self.arm_stretch_in_time:
                     self.cur_task = 'CHECK_BALL'
             elif self.cur_state == 'CHECK_BALL':
