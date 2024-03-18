@@ -3,8 +3,8 @@ from rclpy.node import Node
 
 from std_msgs.msg import Float64MultiArray
 from geometry_msgs.msg import Vector3
-from gazebo_msgs.srv import SetEntityState
-from gazebo_msgs.msg import ModelStates
+# from gazebo_msgs.srv import SetEntityState
+# from gazebo_msgs.msg import ModelStates
 
 
 class Bridge(Node):
@@ -20,7 +20,7 @@ class Bridge(Node):
             self.real_x_scale = 1.0
             self.real_y_scale = 1.0
             self.real_z_scale = 1.0
-            self.real_yaw_scalre = 1.0
+            self.real_yaw_scale = 1.0
             # subscribe to fsm output
             self.sub = self.create_subscription(
                 Float64MultiArray,

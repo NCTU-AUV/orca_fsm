@@ -44,6 +44,7 @@ class KeyboardController(Node):
 
     def run(self):
         key = self.get_key()
+        target_yaw = self.yaw
 
         if key == 'w':
             self.dx = self.LIN_VEL_STEP
