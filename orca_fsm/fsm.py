@@ -5,7 +5,7 @@ import threading
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-from std_msgs.msg import Float32MultiArray, Float64, Int8
+from std_msgs.msg import Float32MultiArray, Float64, Int8, Float32
 from vision_msgs.msg import Detection2DArray
 from vision_msgs.msg import Point2D
 from sensor_msgs.msg import Image
@@ -44,6 +44,12 @@ class FSM(Node):
             self.detection_cb,
             10)
         self.detection_sub  # prevent unused variable warning
+
+        # self.water_com_sub = self.create_subscription(
+        #     Float32,
+        #     'fft',
+        #     self.water_com_cb,
+        #     10)
 
         self.cap = None
         self.cur_frame_msg = Image()
@@ -89,7 +95,7 @@ class FSM(Node):
             10)
         
         # Varaibles
-        self.cur_task = 'TEST_CAM_SWITCH'
+        self.cur_task = 'DONE'
         self.cur_state = 'NONE'
         self.nxt_state = 'START'
 
@@ -123,11 +129,21 @@ class FSM(Node):
             'red_flare': False,
             'yellow_flare': False
         }
+        self.score = {
+            'blue_drum': 0.0,
+            'blue_flare': 0.0,
+            'gate': 0.0,
+            'metal_ball': 0.0,
+            'orange_flare': 0.0,
+            'red_flare': 0.0,
+            'yellow_flare': 0.0
+        }
         self.gate_width = 0.0
         self.prev_time = time.time()
         self.gate_direction = 1.0
         self.avoid_flare_time = 0.0
         self.got_water_com = False
+        self.water_com = 0.0
         self.cur_aim_flare_id = 0
         self.flare_down_check_cnt = 0
         self.use_bottom_cam = False
@@ -524,7 +540,8 @@ class FSM(Node):
 
     def main_sequence(self):
         if self.cur_task == 'DONE':
-            self.get_logger().info('DONE')
+            pass
+            # self.get_logger().info('DONE')
         else:
             self.get_logger().info(self.cur_task + ' -> ' + self.cur_state)
         self.show_detection()
@@ -570,6 +587,7 @@ class FSM(Node):
                     self.detected[obj_name[id]] = True
                     if obj_name[id] == 'gate':
                         self.gate_width = detection.bbox.size_x
+                    self.score[id] = result.hypothesis.score
             else:
                 raise ValueError('Invalid class id')
         self.main_sequence()
@@ -580,9 +598,9 @@ class FSM(Node):
     def show_detection(self):
         for key in self.detected.keys():
             if self.detected[key]:
-                self.get_logger().info(key + ' detected at (' + str(self.pose[key].x) + ', ' + str(self.pose[key].y) + ')')
-            else:
-                self.get_logger().info(key + ' not detected')
+                self.get_logger().info('DETECTED: ' + key + ' - ' + str(self.pose[key].x) + ', ' + str(self.pose[key].y) + ' - hyp: ' + str(self.score[key]))
+            # else:
+            #     self.get_logger().info(key + ' not detected')
 
     def front_cam_cb(self, img_msg):
         if not self.use_bottom_cam:
@@ -591,6 +609,11 @@ class FSM(Node):
     def bottom_cam_cb(self, img_msg):
         if self.use_bottom_cam:
             self.cur_frame_msg = img_msg
+
+    def water_com_cb(self, water_com_msg):
+        self.got_water_com = True
+        self.water_com = water_com_msg.data
+        # self.get_logger().info('Water com: ' + str(self.water_com))
 
     def init_bottom_cam(self):
         self.cap = cv2.VideoCapture(6)
@@ -605,6 +628,7 @@ class FSM(Node):
                 ret, frame = self.cap.read()
                 if ret: 
                     frame_msg = self.cv_bridge.cv2_to_imgmsg(frame, encoding='bgr8')
+                    # frame_msg = self.cv_bridge.cv2_to_imgmsg(frame)
                     self.cam_pub.publish(frame_msg)
             else:
                 self.cam_pub.publish(self.cur_frame_msg)
