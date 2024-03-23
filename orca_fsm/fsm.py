@@ -569,25 +569,23 @@ class FSM(Node):
         score_dict = {}
         for detection in detection_msg.detections:
             result = detection.results[0]
-            # get the detection with the highest score
-            # self.get_logger().info('Class ID: ' + result.hypothesis.class_id)
-            id = detection.results[0].hypothesis.class_id
-            score = detection.results[0].hypothesis.score
+            id = result.hypothesis.class_id
+            score = result.hypothesis.score
             result_pose = detection.bbox.center.position
             if id in score_dict:
-                if result.hypothesis.score < score_dict[id]:
+                if score < score_dict[id]:
                     continue
-                score_dict[id] = result.hypothesis.score
+                score_dict[id] = score
             if id in obj_name:
                 hyp_threshold = 0.5
                 if id == '1' or id == '5' or id == '6': # flares
                     hyp_threshold = 0.2
-                if result.hypothesis.score > hyp_threshold:
+                if score > hyp_threshold:
                     self.pose[obj_name[id]] = result_pose
                     self.detected[obj_name[id]] = True
                     if obj_name[id] == 'gate':
                         self.gate_width = detection.bbox.size_x
-                    self.score[id] = result.hypothesis.score
+                    self.score[obj_name[id]] = score
             else:
                 raise ValueError('Invalid class id')
         self.main_sequence()
@@ -599,8 +597,6 @@ class FSM(Node):
         for key in self.detected.keys():
             if self.detected[key]:
                 self.get_logger().info('DETECTED: ' + key + ' - ' + str(self.pose[key].x) + ', ' + str(self.pose[key].y) + ' - hyp: ' + str(self.score[key]))
-            # else:
-            #     self.get_logger().info(key + ' not detected')
 
     def front_cam_cb(self, img_msg):
         if not self.use_bottom_cam:
