@@ -19,13 +19,21 @@ class Bridge(Node):
         if self.mode == 'real':
             self.real_x_scale = 1.0
             self.real_y_scale = 1.0
-            self.real_z_scale = 1.0
+            self.real_depth_scale = 1.0
             self.real_yaw_scale = 1.0
+            self.current_depth = 0.0
+            self.current_yaw = 0.0
+            self.current_arm = 0.0
             # subscribe to fsm output
             self.sub = self.create_subscription(
                 Float32MultiArray,
                 'fsm_output',
                 self.real_callback,
+                10)
+            self.control_sub = self.create_subscription(
+                Float32MultiArray,
+                'rpi_to_oring',
+                self.control_callback,
                 10)
             # publish target pose to controller
             self.pub = self.create_publisher(
@@ -63,10 +71,15 @@ class Bridge(Node):
     def real_callback(self, msg):
         msg.data[0] *= self.real_x_scale # x
         msg.data[1] *= self.real_y_scale # y
-        msg.data[2] *= self.real_z_scale # z
+        msg.data[2] *= self.real_depth_scale # depth
         msg.data[3] *= self.real_yaw_scale # yaw
         self.get_logger().info('msg: "%s"' % msg.data)
         self.pub.publish(msg)
+
+    def control_callback(self, msg):
+        self.current_yaw = msg.data[0]
+        self.current_arm = msg.data[1]
+        self.current_depth = msg.data[2]
 
     def sim_callback(self, msg):
         if self.current_pose is None:
@@ -76,7 +89,7 @@ class Bridge(Node):
         self.get_logger().info(f'msg: {msg.data}')
 
         # switch x and y
-        y, x, z, yaw = msg.data
+        y, x, z, yaw = msg.data 
         x *= self.sim_scale
         y *= self.sim_scale
 

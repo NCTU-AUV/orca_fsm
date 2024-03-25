@@ -10,14 +10,23 @@ from vision_msgs.msg import Detection2DArray
 from vision_msgs.msg import Point2D
 from sensor_msgs.msg import Image
 
+# obj_name = {
+#     '0': 'blue_drum',
+#     '1': 'blue_flare',
+#     '2': 'gate',
+#     '3': 'metal_ball',
+#     '4': 'orange_flare',
+#     '5': 'red_flare',
+#     '6': 'yellow_flare',
+# }
+
 obj_name = {
     '0': 'blue_drum',
     '1': 'blue_flare',
     '2': 'gate',
-    '3': 'metal_ball',
-    '4': 'orange_flare',
-    '5': 'red_flare',
-    '6': 'yellow_flare',
+    '3': 'orange_flare',
+    '4': 'red_flare',
+    '5': 'yellow_flare',
 }
 
 flare_order = {
@@ -45,11 +54,11 @@ class FSM(Node):
             10)
         self.detection_sub  # prevent unused variable warning
 
-        # self.water_com_sub = self.create_subscription(
-        #     Float32,
-        #     'fft',
-        #     self.water_com_cb,
-        #     10)
+        self.water_com_sub = self.create_subscription(
+            Float32,
+            'fft',
+            self.water_com_cb,
+            10)
 
         self.cap = None
         self.cur_frame_msg = Image()
@@ -95,16 +104,16 @@ class FSM(Node):
             10)
         
         # Varaibles
-        self.cur_task = 'DONE'
+        self.cur_task = 'BUMP_FLARE'
         self.cur_state = 'NONE'
         self.nxt_state = 'START'
 
         self.dx = 0.0 # front > 0
         self.dy = 0.0 # right > 0
-        self.dz = 0.0 # up > 0
-        self.d_yaw = 0.0 # cw > 0
-        # arm control 0: idle, 1: drop, 2: stretch out, 3: stretch in
-        self.arm_state = 0.0
+        self.dz = 0.0 # down > 0
+        self.d_yaw = 0.0
+        self.drop = 0.0 # 0: close, 1: open
+        self.arm_mode = 0.0 # 0: idle, 1: grab, 2: release
 
         self.speed_x = 1.0
         self.speed_y = 1.0
@@ -167,8 +176,6 @@ class FSM(Node):
         self.flare_order_com = 0 # default order
         self.bump_back_timeout = 20.0 # seconds
         self.drop_ball_time = 3.0 # seconds
-        self.arm_stretch_out_time = 3.0 # seconds
-        self.arm_stretch_in_time = 3.0
         self.leave_area_time = 5.0 # seconds
 
 
@@ -186,13 +193,9 @@ class FSM(Node):
                     self.cruise_interval *= 2.0
                 self.dx = 0.0
                 self.dy = self.speed_y * self.cruise_direction
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if self.detected['gate']:
                     self.nxt_state = 'AIM_GATE_1'
             elif self.cur_state == 'AIM_GATE_1':
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if not self.detected['gate']:
                     pass # keep previous dx and dy
                 elif abs(self.pose['gate'].x - 320.0) < self.aim_gate_1_tol:
@@ -207,8 +210,6 @@ class FSM(Node):
             elif self.cur_state == "FORWARD_3M":
                 self.dx = self.speed_x
                 self.dy = 0.0
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if time.time() - self.prev_time > self.forward_1m_time * 3.0:
                     flare_inside_gate = self.pose['orange_flare'].x < self.pose['gate'].x + self.gate_width / 2 and self.pose['orange_flare'].x > self.pose['gate'].x - self.gate_width / 2
                     if self.detected['orange_flare'] and flare_inside_gate:
@@ -219,8 +220,6 @@ class FSM(Node):
                         self.nxt_state = 'FORWARD_6M'
             elif self.cur_state == 'AVOID_FLARE':
                 self.dx = 0.0
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if self.pose['orange_flare'].x < self.pose['gate'].x:
                     self.gate_direction = -1.0
                 else:
@@ -236,24 +235,18 @@ class FSM(Node):
             elif self.cur_state == 'FORWARD_6M':
                 self.dx = self.speed_x
                 self.dy = 0.0
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if time.time() - self.prev_time > self.forward_1m_time * 5.5:
                     self.prev_time = time.time()
                     self.nxt_state = 'BACK_TO_GATE'
             elif self.cur_state == 'BACK_TO_GATE':
                 self.dx = 0.0
                 self.dy = self.speed_y * self.gate_direction
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if self.detected['gate']:
                     self.nxt_state = 'AIM_GATE_2'
                 elif time.time() - self.prev_time > self.avoid_flare_time:
                     self.prev_time = time.time()
                     self.nxt_state = 'FORWARD_5M'
             elif self.cur_state == 'AIM_GATE_2':
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if not self.detected['gate']:
                     pass
                 elif abs(self.pose['gate'].x - 320.0) < self.aim_gate_2_tol:
@@ -262,15 +255,11 @@ class FSM(Node):
             elif self.cur_state == 'FORWARD_5M':
                 self.dx = self.speed_x
                 self.dy = 0.0
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if time.time() - self.prev_time > self.forward_1m_time * 5.0:
                     self.nxt_state = 'FINISH'
             elif self.cur_state == 'FINISH':
                 self.dx = self.speed_x
                 self.dy = 0.0
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if time.time() - self.prev_time > self.pass_gate_finish_time:
                     self.cur_task = 'DONE'
                     self.dx = 0.0
@@ -292,16 +281,12 @@ class FSM(Node):
                 # TODO: Implement find flare 
                 self.dx = 0.0
                 self.dy = 0.0
-                self.dz = 0.0
-                self.d_yaw = 0.0
             elif self.cur_state == 'WAIT':
                 if self.got_water_com or time.time() - self.prev_time > 10.0:
                     self.nxt_state = 'AIM'
                 else:
                     self.dx = 0.0
                     self.dy = 0.0
-                    self.dz = 0.0
-                    self.d_yaw = 0.0
             elif self.cur_state == 'AIM':
                 self.dx = 0.0
                 if self.detected[cur_aim_flare]:
@@ -315,8 +300,6 @@ class FSM(Node):
             elif self.cur_state == 'BUMP_FLARE_FORWARD':
                 self.dx = self.speed_x * 1.5
                 self.dy = 0.0
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if not self.detected[cur_aim_flare]:
                     self.flare_down_check_cnt = 0
                     self.nxt_state = 'CHECK_FLARE_DOWN'
@@ -337,8 +320,6 @@ class FSM(Node):
             elif self.cur_state == 'BUMP_FLARE_BACK':
                 self.dx = -self.speed_x * 1.5
                 self.dy = 0.0
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if self.detected[cur_aim_flare] or time.time() - self.prev_time > self.bump_back_timeout:
                     self.nxt_state = 'AIM'
             else:
@@ -362,13 +343,9 @@ class FSM(Node):
                     self.cruise_interval *= 2.0
                 self.dx = 0.0
                 self.dy = self.speed_y * self.cruise_direction
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if self.detected['blue_drum']:
                     self.nxt_state = 'AIM_DRUM_FRONT'
             elif self.cur_state == 'AIM_DRUM_FRONT':
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if not self.detected['blue_drum']:
                     pass # keep previous dx and dy
                 elif abs(self.pose['blue_drum'].x - 320.0) < self.aim_drum_tol:
@@ -384,8 +361,6 @@ class FSM(Node):
             elif self.cur_state == "FORWARD":
                 self.dx = self.speed_x
                 self.dy = 0.0
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if not self.detected['blue_drum']:
                     self.cur_state = 'BOTTOM_AIM' # to escape from loop
                     self.nxt_state = 'BOTTOM_AIM'
@@ -409,9 +384,7 @@ class FSM(Node):
             elif self.cur_state == 'DROP':
                 self.dx = 0.0
                 self.dy = 0.0
-                self.dz = 0.0
-                self.d_yaw = 0.0
-                self.arm_state = 1.0
+                self.drop = 1.0
                 if time.time() - self.prev_time > self.drop_ball_time:
                     self.cur_task = 'PICK_BALL'
                     self.cur_state = 'START'
@@ -430,8 +403,6 @@ class FSM(Node):
             elif self.cur_state == 'LEAVE_AREA':
                 self.dx = self.speed_x * -1.0
                 self.dy = 0.0
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if time.time() - self.prev_time > self.leave_area_time:
                     self.cruise_direction = 10.0
                     self.cruise_interval = self.cruise_init_interval
@@ -444,13 +415,9 @@ class FSM(Node):
                     self.cruise_interval *= 2.0
                 self.dx = 0.0
                 self.dy = self.speed_y * self.cruise_direction
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if self.detected['blue_drum']:
                     self.nxt_state = 'AIM_DRUM_FRONT'
             elif self.cur_state == 'AIM_DRUM_FRONT':
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if not self.detected['blue_drum']:
                     pass # keep previous dx and dy
                 elif abs(self.pose['blue_drum'].x - 320.0) < self.aim_drum_tol:
@@ -465,8 +432,6 @@ class FSM(Node):
             elif self.cur_state == "FORWARD":
                 self.dx = self.speed_x
                 self.dy = 0.0
-                self.dz = 0.0
-                self.d_yaw = 0.0
                 if not detected['blue_drum']:
                     self.cur_state = 'BOTTOM_AIM_DRUM' # to escape from loop
                     self.nxt_state = 'BOTTOM_AIM_DRUM'
@@ -504,14 +469,12 @@ class FSM(Node):
             elif self.cur_state == 'STRETCH_OUT':
                 self.dx = 0.0
                 self.dy = 0.0
-                self.dz = 0.0
-                self.d_yaw = 0.0
-                self.arm_state = 2.0
+                self.arm_mode = 2.0
                 if time.time() - self.prev_time > self.arm_stretch_out_time:
                     self.prev_time = time.time()
                     self.nxt_state = 'STRETCH_IN'
             elif self.cur_state == 'STRETCH_IN':
-                self.arm_state = 3.0
+                self.arm_mode = 1.0
                 if time.time() - self.prev_time > self.arm_stretch_in_time:
                     self.cur_task = 'CHECK_BALL'
             elif self.cur_state == 'CHECK_BALL':
@@ -522,7 +485,7 @@ class FSM(Node):
             else:
                 raise ValueError('Invalid state - ' + self.cur_state)
 
-    def task_test_cam_switch(self):
+    def task_test(self):
         self.cur_state = 'NONE'
         while self.cur_state != self.nxt_state:
             self.cur_state = self.nxt_state
@@ -553,13 +516,11 @@ class FSM(Node):
             self.task_drop_ball()
         elif self.cur_task == 'PICK_BALL':
             self.task_pick_ball()
-        elif self.cur_task == 'TEST_CAM_SWITCH':
-            self.task_test_cam_switch()
+        elif self.cur_task == 'TEST':
+            self.task_test()
         elif self.cur_task == 'DONE':
             self.dx = 0.0
             self.dy = 0.0
-            self.dz = 0.0
-            self.d_yaw = 0.0
         else:
             self.get_logger().info('Error: Invalid task')
 
@@ -590,7 +551,7 @@ class FSM(Node):
                 raise ValueError('Invalid class id')
         self.main_sequence()
         msg = Float32MultiArray()
-        msg.data = [self.dx, self.dy, self.dz, self.d_yaw, self.arm_state]
+        msg.data = [self.dx, self.dy, self.dz, self.d_yaw, self.drop, self.arm_mode]
         self.pub.publish(msg)
 
     def show_detection(self):
