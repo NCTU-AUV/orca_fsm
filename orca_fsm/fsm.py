@@ -30,12 +30,13 @@ obj_name = {
 }
 
 flare_order = {
-    0: ['red_flare', 'yellow_flare', 'blue_flare'],
-    1: ['yellow_flare', 'blue_flare', 'red_flare'],
-    2: ['blue_flare', 'red_flare', 'yellow_flare'],
-    3: ['red_flare', 'blue_flare', 'yellow_flare'],
-    4: ['yellow_flare', 'red_flare', 'blue_flare'],
-    5: ['blue_flare', 'yellow_flare', 'red_flare']
+    0: ['trash'],
+    1: ['red_flare', 'yellow_flare', 'blue_flare'],
+    2: ['yellow_flare', 'blue_flare', 'red_flare'],
+    3: ['blue_flare', 'red_flare', 'yellow_flare'],
+    4: ['red_flare', 'blue_flare', 'yellow_flare'],
+    5: ['yellow_flare', 'red_flare', 'blue_flare'],
+    6: ['blue_flare', 'yellow_flare', 'red_flare']
 }
 
 class FSM(Node):
@@ -54,10 +55,10 @@ class FSM(Node):
             10)
         self.detection_sub  # prevent unused variable warning
 
-        self.water_com_sub = self.create_subscription(
-            Float32,
-            'fft',
-            self.water_com_cb,
+        self.control_sub = self.create_subscription(
+            Float32MultiArray,
+            'rpi_to_oring',
+            self.control_cb,
             10)
 
         self.cap = None
@@ -152,10 +153,14 @@ class FSM(Node):
         self.gate_direction = 1.0
         self.avoid_flare_time = 0.0
         self.got_water_com = False
-        self.water_com = 0.0
         self.cur_aim_flare_id = 0
         self.flare_down_check_cnt = 0
         self.use_bottom_cam = False
+
+        self.real_yaw = 0.0
+        self.real_arm_done = 0.0
+        self.real_depth = 0.0
+        self.water_com = 0.0
 
         # Parameters
         self.cruise_init_interval = 5.0 # seconds
@@ -567,10 +572,13 @@ class FSM(Node):
         if self.use_bottom_cam:
             self.cur_frame_msg = img_msg
 
-    def water_com_cb(self, water_com_msg):
-        self.got_water_com = True
-        self.water_com = water_com_msg.data
-        # self.get_logger().info('Water com: ' + str(self.water_com))
+    def control_cb(self, control_msg):
+        self.real_yaw = control_msg.data[0]
+        self.real_arm_done = control_msg.data[1]
+        self.real_depth = control_msg.data[2]
+        self.water_com = control_msg.data[3]
+        if not self.got_water_com and self.water_com > 0.0:
+            self.got_water_com = True
 
     def init_bottom_cam(self):
         self.cap = cv2.VideoCapture(6)

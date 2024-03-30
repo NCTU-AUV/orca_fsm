@@ -58,7 +58,10 @@ class KeyboardController(Node):
     def run(self):
         key = self.get_key()
         if key == 'w':
-            self.dx = self.LIN_VEL_STEP
+            if (not self.dx == 0.0):
+                self.dx += self.LIN_VEL_STEP
+            else:
+                self.dx = self.LIN_VEL_STEP
             self.dy = 0.0
             self.get_logger().info("front")
         elif key == 'a':
@@ -66,7 +69,10 @@ class KeyboardController(Node):
             self.dy = -self.LIN_VEL_STEP
             self.get_logger().info("left")
         elif key == 's':
-            self.dx = -self.LIN_VEL_STEP
+            if (not self.dx == 0.0):
+                self.dx -= self.LIN_VEL_STEP
+            else:
+                self.dx = -self.LIN_VEL_STEP
             self.dy = 0.0
             self.get_logger().info("back")
         elif key == 'd':
@@ -115,6 +121,7 @@ class KeyboardController(Node):
         self.real_yaw = msg.data[0]
         self.real_arm_done = msg.data[1]
         self.real_depth = msg.data[2]
+        self.water_com = msg.data[3]
 
 def main():
     rclpy.init()
