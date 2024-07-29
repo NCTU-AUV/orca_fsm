@@ -72,8 +72,8 @@ class FSM(Node):
                 10)
             self.front_cam_sub
 
-            self.init_bottom_cam()
-            self.cv_bridge = CvBridge()
+            # self.init_bottom_cam()
+            # self.cv_bridge = CvBridge()
 
             self.cam_pub = self.create_publisher(
                 Image,
@@ -105,7 +105,7 @@ class FSM(Node):
             10)
         
         # Varaibles
-        self.cur_task = 'BUMP_FLARE'
+        self.cur_task = 'TEST'
         self.cur_state = 'NONE'
         self.nxt_state = 'START'
 
@@ -330,6 +330,69 @@ class FSM(Node):
             else:
                 raise ValueError('Invalid state - ' + self.cur_state)
                 
+    def task_move_test(self):
+        self.cur_state = "NONE"
+        while self.cur_state != self.nxt_state:
+            self.cur_state = self.nxt_state
+            if self.cur_state == 'START':
+                self.nxt_state = 'MOVE_FORWARD'
+                self.prev_time = time.time()
+            elif self.cur_state == 'MOVE_FORWARD':
+                self.dx = self.speed_x * 1.0
+                if time.time() - self.prev_time > 5.0:
+                    self.dx = 0.0
+                    self.prev_time = time.time()
+                    self.nxt_state = 'STOP'
+            elif self.cur_state == 'MOVE_BACKWARD':
+                self.dx = -self.speed_x * 1.0
+                if time.time() - self.prev_time > 5.0:
+                    self.dx = 0.0
+                    self.prev_time = time.time()
+                    self.nxt_state = 'STOP'
+            elif self.cur_state == 'TURN_LEFT':
+                self.d_yaw = 90.0
+                if self.real_yaw > 85.0 and self.real_yaw < 95.0:
+                    self.d_yaw = 0.0
+                    self.nxt_state = 'STOP'
+            elif self.cur_state == 'TURN_RIGHT':
+                self.d_yaw = -90.0
+                if self.real_yaw > 85.0 and self.real_yaw < 95.0:
+                    self.d_yaw = 0.0
+                    self.nxt_state = 'STOP'
+            elif self.cur_state == 'STOP':
+                self.cur_task = 'DONE'
+            
+    
+    def task_aim_flare_test(self):
+        self.cur_state = "NONE"
+        while self.cur_state != self.nxt_state:
+            self.cur_state = self.nxt_state
+            if self.cur_state == 'START':
+                self.nxt_state = 'AIM'
+            elif self.cur_state == 'AIM':
+                self.dx = 0.0
+                cur_aim_flare = 'red_flare'
+                if self.detected[cur_aim_flare]:
+                    if abs(self.pose[cur_aim_flare].x - 320.0) < self.aim_flare_tol:
+                        self.d_yaw = self.real_yaw
+                        self.prev_time = time.time()
+                        self.nxt_state = 'BUMP'
+                    elif self.pose[cur_aim_flare].x < 320.0:
+                        self.d_yaw = 90
+                    else:
+                        self.d_yaw = -90
+            elif self.cur_state == 'BUMP':
+                self.dx = self.speed_x * 1.0
+                if time.time() - self.prev_time > 2.0:
+                    self.dx = 0.0
+                    self.nxt_state = 'STOP'
+            elif self.cur_state == 'STOP':
+                pass
+    
+    def task_bump_flare_test(self):
+        self.cur_state = "NONE"
+        while self.cur_state != self.nxt_state:
+            self.cur_state = self.nxt_state
         
 
     def task_drop_ball(self):
@@ -522,7 +585,7 @@ class FSM(Node):
         elif self.cur_task == 'PICK_BALL':
             self.task_pick_ball()
         elif self.cur_task == 'TEST':
-            self.task_test()
+            self.task_move_test()
         elif self.cur_task == 'DONE':
             self.dx = 0.0
             self.dy = 0.0
