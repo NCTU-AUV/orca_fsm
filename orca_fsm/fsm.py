@@ -65,20 +65,21 @@ class FSM(Node):
         self.cur_frame_msg = Image()
 
         if self.mode == 'real':
-            self.front_cam_sub = self.create_subscription(
-                Image,
-                '/color/image_raw', # realsense
-                self.front_cam_cb,
-                10)
-            self.front_cam_sub
+            pass
+            # self.front_cam_sub = self.create_subscription(
+            #     Image,
+            #     '/color/image_raw', # realsense
+            #     self.front_cam_cb,
+            #     10)
+            # self.front_cam_sub
 
             # self.init_bottom_cam()
             # self.cv_bridge = CvBridge()
 
-            self.cam_pub = self.create_publisher(
-                Image,
-                'image',
-                10)
+            # self.cam_pub = self.create_publisher(
+            #     Image,
+            #     'image',
+            #     10)
         else:
             self.front_cam_sub = self.create_subscription(
                 Image,
@@ -669,13 +670,7 @@ def main(args=None):
     fsm = FSM()
     executor = MultiThreadedExecutor()
 
-    spin_thread = threading.Thread(target=rclpy.spin, args=(fsm, executor))
-    spin_thread.start()
-
-    rate = fsm.create_rate(5)
-    while rclpy.ok():
-        fsm.pub_image()
-        rate.sleep()
+    rclpy.spin(fsm, executor=executor)
 
     fsm.destroy_node()
     rclpy.shutdown()
