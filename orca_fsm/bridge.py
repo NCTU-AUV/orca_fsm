@@ -3,8 +3,8 @@ from rclpy.node import Node
 
 from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import Vector3
-# from gazebo_msgs.srv import SetEntityState
-# from gazebo_msgs.msg import ModelStates
+from gazebo_msgs.srv import SetEntityState
+from gazebo_msgs.msg import ModelStates
 
 
 class Bridge(Node):
@@ -89,7 +89,7 @@ class Bridge(Node):
         self.get_logger().info(f'msg: {msg.data}')
 
         # switch x and y
-        y, x, z, yaw = msg.data 
+        y, x, z, yaw, drop, arm_mode = msg.data 
         x *= self.sim_scale
         y *= self.sim_scale
 
@@ -99,7 +99,9 @@ class Bridge(Node):
         req = SetEntityState.Request()
         req.state.name = 'orca'
         req.state.pose.position = self.current_pose.position
+        req.state.pose.orientation = self.current_pose.orientation
         req.state.twist.linear = Vector3(x=x, y=y, z=0.0)
+        req.state.twist.angular = Vector3(x=0.0, y=0.0, z=yaw)
         self.set_cli.call_async(req)
 
     def model_states_callback(self, msg):

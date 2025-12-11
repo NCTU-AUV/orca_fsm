@@ -1,0 +1,22 @@
+auv_decision_node:
+  ros__parameters:
+    mode: 'sim'
+    
+    # Topic remapping for simulation
+    rgb_topic: '/realsense/image'
+    depth_topic: '/realsense/depth_image'
+    camera_info_topic: '/realsense/camera_info'
+    detection_topic: 'detections_output'
+    feedback_topic: 'rpi_to_oring'
+    cmd_vel_topic: '/cmd_vel'
+    gripper_topic: 'gripper_command'
+    
+    # Control parameters
+    control_rate: 20.0
+    max_linear_vel: 0.5
+    max_angular_vel: 0.5
+    
+    # Detection parameters
+    min_confidence: 0.5
+    use_depth: true
+    depth_scale: 1.0

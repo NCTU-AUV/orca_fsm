@@ -1,0 +1,22 @@
+auv_decision_node:
+  ros__parameters:
+    mode: 'real'
+    
+    # Topic remapping for real hardware
+    rgb_topic: '/camera/color/image_raw'
+    depth_topic: '/camera/aligned_depth_to_color/image_raw'
+    camera_info_topic: '/camera/color/camera_info'
+    detection_topic: 'detections_output'
+    feedback_topic: 'rpi_to_oring'
+    cmd_vel_topic: '/cmd_vel'
+    gripper_topic: 'gripper_command'
+    
+    # Control parameters
+    control_rate: 20.0
+    max_linear_vel: 0.3  # Slower for safety
+    max_angular_vel: 0.3
+    
+    # Detection parameters
+    min_confidence: 0.6  # Higher threshold for real
+    use_depth: true
+    depth_scale: 1.0

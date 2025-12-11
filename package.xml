@@ -2,19 +2,21 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>orca_fsm</name>
-  <version>0.0.0</version>
-  <description>Finite state machine for SAUVC 2024</description>
-  <maintainer email="bbnoir83@gmail.com">bbnoir</maintainer>
+  <version>0.1.0</version>
+  <description>Finite state machine for SAUVC 2026</description>
+  <maintainer email="yc.ee12@nycu.edu.tw">ycchiu226</maintainer>
   <license>Apache-2.0</license>
 
   <exec_depend>time</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>vision_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>opencv-python</exec_depend>
   <exec_depend>cv_bridge</exec_depend>
-  
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
