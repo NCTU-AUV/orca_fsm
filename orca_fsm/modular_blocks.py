@@ -402,7 +402,7 @@ class AlignToObject(BasicBlock):
         error_y = det.center_y - 0.5
         
         # Control lateral and vertical movement
-        cmd.linear.y = -self.kp_x * error_x
+        cmd.angular.z = -self.kp_x * error_x
         cmd.linear.z = -self.kp_y * error_y
         
         return cmd
@@ -577,9 +577,12 @@ def create_gate_passing_sequence():
     return BlockSequence("PassGate", [
         SearchForObject("gate", timeout=10.0),
         AlignToObject("gate", tolerance_x=0.1, tolerance_y=0.1),
-        ApproachObject("gate", target_distance=2.0, tolerance=0.3),
+        MoveForward(distance=3.0, speed=1.5),
+        AlignToObject("gate", tolerance_x=0.01, tolerance_y=0.01),
+        MoveForward(distance=4.0, speed=1.5),
+        # ApproachObject("gate", target_distance=2.0, tolerance=0.3),
         AlignToObject("gate", tolerance_x=0.08, tolerance_y=0.08),
-        MoveForward(distance=3.0, speed=0.4),
+        MoveForward(distance=4.0, speed=1.5),
         Hover(duration=1.0)
     ])
 
@@ -664,47 +667,3 @@ class ModularDecisionRule:
         is_complete = self.current_sequence.is_complete
         
         return cmd_vel, gripper_cmd, is_complete
-
-
-# ============================================
-# USAGE EXAMPLE
-# ============================================
-
-"""
-# In your AUVDecisionNode, replace decision_rule with:
-
-class AUVDecisionNode(Node):
-    def __init__(self):
-        # ... existing init ...
-        self.modular_decision = ModularDecisionRule()
-        self.task_queue = ['pass_gate', 'inspect_drum', 'waypoints']
-        self.task_index = 0
-        
-    def decision_loop(self):
-        # Create execution context
-        exec_ctx = ExecutionContext(
-            detections=self.decision_context.detections,
-            vehicle_state=self.decision_context.vehicle_state,
-            current_time=time.time(),
-            dt=self.decision_context.dt
-        )
-        
-        # Start next task if needed
-        if self.modular_decision.current_sequence is None:
-            if self.task_index < len(self.task_queue):
-                task = self.task_queue[self.task_index]
-                self.modular_decision.start_task(task, exec_ctx)
-                self.get_logger().info(f'Starting task: {task}')
-        
-        # Execute current task
-        cmd_vel, gripper_cmd, is_complete = self.modular_decision.execute(exec_ctx)
-        
-        # Move to next task when complete
-        if is_complete:
-            self.get_logger().info(f'Task {self.task_queue[self.task_index]} complete')
-            self.task_index += 1
-            self.modular_decision.current_sequence = None
-        
-        # Publish commands
-        self.publish_commands(cmd_vel, gripper_cmd)
-"""
